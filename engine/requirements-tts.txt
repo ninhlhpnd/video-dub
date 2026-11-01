@@ -1,0 +1,4 @@
+# Môi trường giọng VieNeu-TTS (.venv_tts, Python 3.11), tách riêng vì khác phiên bản thư viện với .venv.
+vieneu==3.8.3
+huggingface-hub==2.3.0
+onnxruntime==1.31.1

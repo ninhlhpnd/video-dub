@@ -1,0 +1,16 @@
+# Môi trường Python & cache
+engine/.venv/
+engine/.venv_tts/
+__pycache__/
+*.pyc
+
+# Công cụ, mô hình, token đăng nhập (tải/tạo lại bằng setup.ps1 hoặc khi chạy)
+tools/
+
+# Mẫu giọng nghe thử (tạo lại được)
+voice_samples/
+
+# IDE
+.idea/
+.vscode/
+*.iml
