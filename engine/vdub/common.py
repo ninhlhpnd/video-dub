@@ -1,6 +1,7 @@
 """Tiện ích dùng chung: đường dẫn công cụ, gửi tiến độ cho app, gọi ffmpeg, quản lý project."""
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -81,7 +82,47 @@ def probe(path):
         "width": int(v["width"]),
         "height": int(v["height"]),
         "has_audio": a is not None,
+        "vcodec": v.get("codec_name", ""),
+        "color_transfer": v.get("color_transfer", ""),
+        "hdr": v.get("color_transfer", "") in HDR_TRANSFERS,
     }
+
+
+HDR_TRANSFERS = ("arib-std-b67", "smpte2084")  # HLG (iPhone...) và HDR10/PQ
+
+
+def sdr_filter(color_transfer):
+    """Bộ lọc đổi HDR (BT.2020) về SDR thường (BT.709), nếu không đổi thì màu bị bạc, sáng trưng khi xem ở Windows/web."""
+    tin = color_transfer if color_transfer in HDR_TRANSFERS else "arib-std-b67"
+    return (f"zscale=tin={tin}:t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
+            "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p")
+
+
+def ensure_h264(path, step="download"):
+    """Video nén HEVC/AV1/VP9 không phát được trên trình xem mặc định của Windows (và dễ lỗi khi đăng); video HDR
+    thì màu bị lệch: đổi sang H.264 + SDR. Trả về đường dẫn file dùng được."""
+    path = Path(path)
+    info = probe(path)
+    codec = info["vcodec"]
+    if codec == "h264" and not info["hdr"]:
+        return path
+    log(f"Video {'HDR ' if info['hdr'] else ''}nén {codec.upper()} → đang đổi sang H.264"
+        f"{' + màu thường (SDR)' if info['hdr'] else ''}...")
+    base = re.sub(r"(_h264|_sdr)+$", "", path.stem)
+    out = path.with_name(base + "_h264.mp4")
+    if out == path:  # đang xử lý lại chính file đã đổi trước đó
+        out = path.with_name(base + "_sdr.mp4")
+    dur = info["duration"]
+    vf = ["-vf", sdr_filter(info["color_transfer"])] if info["hdr"] else []
+    run_ffmpeg_progress(["-i", path, *vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+                         *(["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"] if info["hdr"] else []),
+                         "-c:a", "copy", "-movflags", "+faststart", out], dur, step)
+    new = probe(out)
+    if new["vcodec"] != "h264" or new["hdr"] or abs(new["duration"] - dur) > 1:
+        out.unlink(missing_ok=True)
+        raise RuntimeError("Đổi sang H.264 không thành công, giữ nguyên file gốc")
+    path.unlink(missing_ok=True)
+    return out
 
 
 def setup_cuda_dlls():
@@ -107,6 +148,7 @@ DEFAULT_SETTINGS = {
     "facebook_page_id": "",
     "facebook_page_token": "",
     "graph_version": "v23.0",
+    "cookies_file": "",  # cookies.txt xuất từ trình duyệt, cho trang đòi cookie (Douyin...)
 }
 
 DEFAULT_OPTIONS = {
@@ -126,7 +168,52 @@ DEFAULT_OPTIONS = {
     "cover_color": "FFD400",
     "cover_text_color": "000000",
     "translate_note": "",
+    # "dub" = lồng tiếng lời thoại; "review" = AI xem video và viết lời kể
+    "mode": "dub",
+    "multi_voice": False,      # lồng tiếng phim: mỗi nhân vật một giọng
+    "review_style": "Kể chuyện hấp dẫn, giọng văn review phim trên TikTok",
+    "review_minutes": 0,       # 0 = kể trên toàn bộ clip; >0 = cắt ghép cảnh chính thành ~N phút
+    "review_note": "",
+    "orig_volume": 0.3,        # review: âm lượng tiếng phim gốc (tự nhỏ lại khi có lời kể)
+    "review_remove_voice": False,  # review: xóa thoại gốc, chỉ giữ nhạc/tiếng động phim
+    "review_source": "ai",     # "ai" = AI xem video tự viết lời; "user" = người dùng tự nhập lời thuyết minh
+    "review_user_script": "",  # lời thuyết minh người dùng nhập (review_source = "user")
+    "fix_overlays": False,     # dò chữ Trung in trên video → dịch / xóa / thay bằng tên kênh (xem overlays.py)
+    "channel_name": "",        # tên kênh: dùng cho chữ được chọn "thay bằng tên kênh" và cho chữ gắn ở góc
+    "channel_watermark": False,  # gắn tên kênh ở góc video suốt cả video
+    "channel_pos": "top-right",  # top-left | top-right | bottom-left | bottom-right
 }
+
+
+def wants_separate(opt):
+    """Có cần tách giọng gốc khỏi nền (Demucs) không."""
+    if opt.get("mode") == "review":
+        return bool(opt.get("review_remove_voice"))
+    return bool(opt.get("keep_background"))
+
+
+# Các bước của từng chế độ (bước nào không cần theo option thì bỏ qua, xem steps_for)
+PIPELINES = {
+    "dub": ["transcribe", "speakers", "translate", "overlays", "separate", "tts", "render"],
+    "review": ["script", "overlays", "separate", "tts", "render"],
+}
+
+
+def steps_for(opt):
+    mode = opt.get("mode", "dub")
+    skip = set()
+    if not wants_separate(opt):
+        skip.add("separate")
+    if mode == "dub" and not opt.get("multi_voice"):
+        skip.add("speakers")
+    if not opt.get("fix_overlays"):
+        skip.add("overlays")
+    return [s for s in PIPELINES.get(mode, PIPELINES["dub"]) if s not in skip]
+
+FEMALE_VOICES = ["vieneu:Trúc Ly", "vieneu:Mai Anh", "vieneu:Đoan Trang", "vieneu:Ngọc Huyền",
+                 "vieneu:Quỳnh Anh", "vieneu:Kim Thanh", "vieneu:Thùy Dung", "vieneu:Ngọc Linh"]
+MALE_VOICES = ["vieneu:Hải Đăng", "vieneu:Quốc Tuấn", "vieneu:Thiện Minh", "vieneu:Minh Đức",
+               "vieneu:Adam", "vieneu:Minh Triết", "vieneu:Thái Sơn", "vieneu:Adam bựa"]
 
 
 def load_settings(path):
@@ -172,6 +259,20 @@ class Project:
     @property
     def opt(self):
         return self.meta["options"]
+
+    @property
+    def edited(self):
+        """Chế độ tóm tắt phim: đã cắt ghép các cảnh chính thành edited.mp4."""
+        return bool(self.meta.get("edited")) and self.path("edited.mp4").exists()
+
+    @property
+    def video(self):
+        """Video đang làm việc: bản cắt ghép (nếu có) hoặc video gốc."""
+        return str(self.path("edited.mp4")) if self.edited else self.meta["video"]
+
+    @property
+    def duration(self):
+        return float(self.meta["edited_duration"]) if self.edited else float(self.meta["duration"])
 
     def path(self, name):
         return self.dir / name

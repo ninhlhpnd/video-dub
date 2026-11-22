@@ -1,8 +1,7 @@
 """Bước 2: dịch từng câu sang tiếng Việt bằng Gemini, giữ đúng id/mốc thời gian, độ dài vừa khung giờ."""
 import json
-import re
-import time
 
+from .ai import Gemini  # noqa: F401  (tts.py dùng translate.Gemini)
 from .common import Project, log, progress
 
 STEP = "translate"
@@ -36,66 +35,6 @@ def slot_seconds(segs, i, duration):
     return max(0.5, min(nxt, s["end"] + 0.8) - s["start"])
 
 
-# Gói miễn phí: model Flash chính chỉ ~20 lượt/ngày, các bản Flash-Lite ~500 lượt/ngày (quota tính riêng từng model).
-# Hết lượt ngày ở model nào thì chuyển sang model kế tiếp.
-FALLBACK_MODELS = ["gemini-flash-lite-latest", "gemini-3.1-flash-lite"]
-
-
-def _retry_delay(err):
-    m = re.search(r"retry(?:Delay)?['\"]?\s*(?:in|:)\s*['\"]?([\d.]+)s", err, re.I)
-    return min(90.0, float(m.group(1)) + 1) if m else 20.0
-
-
-class Gemini:
-    def __init__(self, settings):
-        key = settings.get("gemini_api_key", "").strip()
-        if not key:
-            raise RuntimeError("Chưa nhập Gemini API key trong Cài đặt")
-        from google import genai
-        from google.genai import types
-        self.client = genai.Client(api_key=key)
-        self.models = list(dict.fromkeys([settings["gemini_model"], *FALLBACK_MODELS]))
-        self.cfg = types.GenerateContentConfig(response_mime_type="application/json", temperature=0.3)
-
-    def _next_model(self, why):
-        dead = self.models.pop(0)
-        if not self.models:
-            raise RuntimeError(f"Đã hết lượt Gemini miễn phí hôm nay ở mọi model ({why}). "
-                               "Lượt sẽ được làm mới lúc 14h-15h chiều giờ Việt Nam.")
-        log(f"{dead}: {why} → chuyển sang {self.models[0]}")
-
-    def ask(self, prompt):
-        busy = 0
-        for _ in range(12):
-            model = self.models[0]
-            try:
-                r = self.client.models.generate_content(model=model, contents=prompt, config=self.cfg)
-                return json.loads(r.text)
-            except json.JSONDecodeError:
-                log(f"{model} trả về dữ liệu lỗi, hỏi lại...")
-            except Exception as e:
-                err = str(e)
-                if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    if "PerDay" in err or "per day" in err.lower():
-                        self._next_model("hết lượt trong ngày")
-                    else:
-                        wait = _retry_delay(err)
-                        log(f"{model}: gọi nhanh quá giới hạn/phút, đợi {wait:.0f}s...")
-                        time.sleep(wait)
-                elif "404" in err or "NOT_FOUND" in err:
-                    self._next_model("model không tồn tại")
-                elif "503" in err or "UNAVAILABLE" in err or "500" in err:
-                    busy += 1
-                    if busy >= 3:
-                        busy = 0
-                        self._next_model("máy chủ Google đang quá tải")
-                    else:
-                        log(f"{model}: máy chủ Google quá tải, thử lại sau 10s...")
-                        time.sleep(10)
-                else:
-                    raise RuntimeError(f"Gemini lỗi: {err[:300]}")
-        raise RuntimeError("Gemini không phản hồi sau nhiều lần thử")
-
 
 def run(proj: Project, settings, force=False):
     segs = proj.segments()
@@ -108,7 +47,7 @@ def run(proj: Project, settings, force=False):
     for b in range(0, len(todo), BATCH):
         idx = todo[b:b + BATCH]
         items = [{"id": segs[i]["id"], "text": segs[i]["text"],
-                  "max_chars": max(8, int(slot_seconds(segs, i, proj.meta["duration"]) * CHARS_PER_SEC))}
+                  "max_chars": max(8, int(slot_seconds(segs, i, proj.duration) * CHARS_PER_SEC))}
                  for i in idx]
         prev = [{"text": s["text"], "vi": s["vi"]} for s in segs[max(0, idx[0] - 5):idx[0]] if s.get("vi")]
         context = f"Các câu ngay trước (đã dịch, để giữ mạch):\n{json.dumps(prev, ensure_ascii=False)}" if prev else ""

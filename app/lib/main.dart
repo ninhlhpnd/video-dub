@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'engine.dart';
 import 'pages/home_page.dart';
@@ -7,6 +8,7 @@ final settings = AppSettings();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized(); // trình phát video/âm thanh dùng cho xem trước và nghe thử nhạc
   await settings.load();
   runApp(const VideoDubApp());
 }

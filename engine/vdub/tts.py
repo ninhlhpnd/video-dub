@@ -56,10 +56,9 @@ class EdgeVoice:
 class VieneuVoice:
     concurrency = 1  # mô hình chạy CPU, mỗi lần một câu
 
-    def __init__(self, name):
+    def __init__(self):
         if not VIENEU_PY.exists():
             raise RuntimeError("Chưa cài VieNeu-TTS (thiếu engine/.venv_tts)")
-        self.name = name
         self.lock = threading.Lock()
         self.proc = None
 
@@ -80,12 +79,12 @@ class VieneuVoice:
                 return json.loads(line)
         raise RuntimeError("VieNeu-TTS bị dừng đột ngột")
 
-    def _synth_blocking(self, text, speed, out):
+    def _synth_blocking(self, text, speed, out, name):
         raw = out.with_suffix(".raw.wav")
         with self.lock:
             if self.proc is None:
                 self._start()
-            self.proc.stdin.write(json.dumps({"text": text, "voice": self.name, "out": str(raw)}) + "\n")
+            self.proc.stdin.write(json.dumps({"text": text, "voice": name, "out": str(raw)}) + "\n")
             self.proc.stdin.flush()
             r = self._read()
         if not r.get("ok"):
@@ -95,8 +94,8 @@ class VieneuVoice:
         run_ffmpeg(["-i", raw, *af, "-ac", "1", "-ar", str(SR), "-b:a", "96k", out])
         raw.unlink(missing_ok=True)
 
-    async def synth(self, text, speed, out):
-        await asyncio.to_thread(self._synth_blocking, text, speed, out)
+    async def synth(self, text, speed, out, name):
+        await asyncio.to_thread(self._synth_blocking, text, speed, out, name)
 
     def close(self):
         if self.proc is None:
@@ -108,8 +107,34 @@ class VieneuVoice:
             self.proc.kill()
 
 
-def make_voice(spec):
-    return VieneuVoice(spec[len("vieneu:"):]) if spec.startswith("vieneu:") else EdgeVoice(spec)
+class Voices:
+    """Mỗi câu có thể dùng một giọng khác (lồng tiếng phim nhiều nhân vật). Các giọng VieNeu dùng chung 1 tiến trình."""
+    concurrency = CONCURRENCY
+
+    def __init__(self):
+        self.vieneu = None
+        self.edge = {}
+
+    async def synth(self, spec, text, speed, out):
+        if spec.startswith("vieneu:"):
+            if self.vieneu is None:
+                self.vieneu = VieneuVoice()
+            await self.vieneu.synth(text, speed, out, spec[len("vieneu:"):])
+        else:
+            await self.edge.setdefault(spec, EdgeVoice(spec)).synth(text, speed, out)
+
+    def close(self):
+        if self.vieneu:
+            self.vieneu.close()
+
+
+def voice_for(proj, seg):
+    """Giọng của câu: theo nhân vật (nếu bật nhiều giọng) hoặc giọng chung của project."""
+    if proj.opt.get("multi_voice") and proj.opt.get("mode", "dub") == "dub":
+        sp = proj.meta.get("speakers", {}).get(str(seg.get("speaker", "")), {})
+        if sp.get("voice"):
+            return sp["voice"]
+    return proj.opt["voice"]
 
 
 def _decode(path):
@@ -131,33 +156,34 @@ def _avail(segs, i, duration):
     return max(0.4, min(nxt - GAP, s["end"] + SPILL) - s["start"])
 
 
-async def _process(proj, segs, i, voice, max_speed, ai, sem, engine):
+async def _process(proj, segs, i, max_speed, ai, sem, voices):
     s = segs[i]
     text = s.get("vi", "").strip()
     if not text:
         s.update(tts="", tts_dur=0, fit="empty")
         return
-    avail = _avail(segs, i, proj.meta["duration"])
+    voice = voice_for(proj, s)
+    avail = _avail(segs, i, proj.duration)
     key = hashlib.md5(f"{text}|{voice}|{max_speed}|{avail:.2f}".encode()).hexdigest()[:12]
     out = proj.path(f"tts/{s['id']:04d}.mp3")
     if s.get("tts_key") == key and out.exists():
         return  # câu này không đổi so với lần trước
 
     async with sem:
-        await engine.synth(text, 1.0, out)
+        await voices.synth(voice, text, 1.0, out)
         dur = len(await asyncio.to_thread(_decode, out)) / SR
         ratio = dur / avail
         if ratio > max_speed and ai:
             # dài quá: nhờ AI nói gọn lại
             target = max(6, int(len(text) * max_speed / ratio * 0.95))
-            short = await asyncio.to_thread(translate.shorten, ai, s["text"], text, target)
+            short = await asyncio.to_thread(translate.shorten, ai, s["text"] or text, text, target)
             if short and len(short) < len(text):
                 text = s["vi"] = short
-                await engine.synth(text, 1.0, out)
+                await voices.synth(voice, text, 1.0, out)
                 dur = len(await asyncio.to_thread(_decode, out)) / SR
                 ratio = dur / avail
         if ratio > 1.02:
-            await engine.synth(text, min(ratio, max_speed) + 0.01, out)
+            await voices.synth(voice, text, min(ratio, max_speed) + 0.01, out)
             dur = len(await asyncio.to_thread(_decode, out)) / SR
             ratio = dur / avail
 
@@ -167,9 +193,9 @@ async def _process(proj, segs, i, voice, max_speed, ai, sem, engine):
     s["tts_key"] = hashlib.md5(f"{text}|{voice}|{max_speed}|{avail:.2f}".encode()).hexdigest()[:12]
 
 
-async def _run_all(proj, segs, voice, max_speed, ai, engine):
-    sem = asyncio.Semaphore(engine.concurrency)
-    tasks = [asyncio.create_task(_process(proj, segs, i, voice, max_speed, ai, sem, engine))
+async def _run_all(proj, segs, max_speed, ai, voices):
+    sem = asyncio.Semaphore(voices.concurrency)
+    tasks = [asyncio.create_task(_process(proj, segs, i, max_speed, ai, sem, voices))
              for i in range(len(segs))]
     done = 0
     for t in asyncio.as_completed(tasks):
@@ -181,7 +207,7 @@ async def _run_all(proj, segs, voice, max_speed, ai, engine):
 def assemble(proj: Project, segs):
     """Ghép các câu thành 1 track giọng đọc dài bằng video. Câu lố giờ sẽ đẩy câu sau lùi lại một chút."""
     import soundfile as sf
-    track = np.zeros(int(proj.meta["duration"] * SR) + SR, dtype=np.float32)
+    track = np.zeros(int(proj.duration * SR) + SR, dtype=np.float32)
     cursor = 0.0
     for s in segs:
         f = proj.path(f"tts/{s['id']:04d}.mp3")
@@ -196,7 +222,7 @@ def assemble(proj: Project, segs):
         s["v_start"] = round(start, 3)
         s["v_end"] = round(start + len(clip) / SR, 3)
         cursor = s["v_end"] + GAP
-    track = track[: int(proj.meta["duration"] * SR)]
+    track = track[: int(proj.duration * SR)]
     sf.write(str(proj.path("dub_voice.wav")), np.clip(track, -1, 1), SR, subtype="PCM_16")
 
 
@@ -210,11 +236,11 @@ def preview(spec):
     folder.mkdir(parents=True, exist_ok=True)
     out = folder / (hashlib.md5(f"{spec}|{PREVIEW_TEXT}".encode()).hexdigest()[:12] + ".mp3")
     if not out.exists():
-        engine = make_voice(spec)
+        voices = Voices()
         try:
-            asyncio.run(engine.synth(PREVIEW_TEXT, 1.0, out))
+            asyncio.run(voices.synth(spec, PREVIEW_TEXT, 1.0, out))
         finally:
-            engine.close()
+            voices.close()
     return str(out)
 
 
@@ -223,19 +249,20 @@ def run(proj: Project, settings):
     if not any(s.get("vi") for s in segs):
         raise RuntimeError("Chưa có phụ đề tiếng Việt, hãy chạy bước dịch trước")
     proj.path("tts").mkdir(exist_ok=True)
-    voice = proj.opt["voice"]
     ai = None
-    if settings.get("gemini_api_key"):
+    # lời thuyết minh người dùng tự viết thì không tự sửa câu, chỉ đọc nhanh hơn và đánh dấu câu quá dài
+    user_script = proj.opt.get("mode") == "review" and proj.opt.get("review_source") == "user"
+    if settings.get("gemini_api_key") and not user_script:
         try:
             ai = translate.Gemini(settings)
         except Exception as e:
             log(f"Không dùng được Gemini để rút gọn câu: {e}")
     progress(STEP, 0, "Đang đọc lời thoại...")
-    engine = make_voice(voice)
+    voices = Voices()
     try:
-        asyncio.run(_run_all(proj, segs, voice, float(proj.opt["max_speed"]), ai, engine))
+        asyncio.run(_run_all(proj, segs, float(proj.opt["max_speed"]), ai, voices))
     finally:
-        engine.close()
+        voices.close()
     proj.save_segments(segs)
 
     progress(STEP, 92, "Đang ghép giọng đọc theo timeline...")

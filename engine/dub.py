@@ -14,21 +14,31 @@ import traceback
 sys.stdout.reconfigure(encoding="utf-8")
 
 from vdub import common  # noqa: E402  (đặt biến môi trường HF_HOME/TORCH_HOME trước khi nạp mô hình)
-from vdub.common import Project, emit, load_settings  # noqa: E402
+from vdub.common import PIPELINES, Project, emit, load_settings, steps_for  # noqa: E402
 
-PIPELINE = ["transcribe", "translate", "separate", "tts", "render"]
+ALL_STEPS = list(dict.fromkeys(s for steps in PIPELINES.values() for s in steps))
 
 
 def step_module(name):
-    from vdub import render, separate, transcribe, translate, tts
-    return {"transcribe": transcribe, "translate": translate, "separate": separate,
-            "tts": tts, "render": render}[name]
+    from vdub import overlays, render, review, separate, speakers, transcribe, translate, tts
+    return {"transcribe": transcribe, "speakers": speakers, "translate": translate, "script": review,
+            "overlays": overlays, "separate": separate, "tts": tts, "render": render}[name]
+
+
+def plan(proj, start):
+    """Các bước sẽ chạy: theo chế độ của project, bắt đầu từ [start] (bỏ qua bước không cần)."""
+    full = PIPELINES.get(proj.opt.get("mode", "dub"), PIPELINES["dub"])
+    steps = steps_for(proj.opt)
+    if not start or start not in full:
+        return steps
+    return [s for s in steps if full.index(s) >= full.index(start)]
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["new", "run", "info", "cover", "preview", "fb_pages", "youtube", "facebook",
-                                    *PIPELINE])
+    ap.add_argument("--url", default="", help="link hoặc đoạn chữ chia sẻ chứa link (lệnh download)")
+    ap.add_argument("cmd", choices=["new", "download", "music", "run", "plan", "info", "cover", "preview", "caption", "fb_pages",
+                                    "youtube", "facebook", *ALL_STEPS])
     ap.add_argument("--voice", default="")
     ap.add_argument("--app-id", default="")
     ap.add_argument("--app-secret", default="")
@@ -37,7 +47,7 @@ def main():
     ap.add_argument("--video")
     ap.add_argument("--workspace")
     ap.add_argument("--settings")
-    ap.add_argument("--from", dest="start", default="transcribe", choices=PIPELINE)
+    ap.add_argument("--from", dest="start", default="", choices=["", *ALL_STEPS])
     ap.add_argument("--force", action="store_true", help="dịch lại cả những câu đã dịch")
     ap.add_argument("--title", default="")
     ap.add_argument("--description", default="")
@@ -59,6 +69,17 @@ def main():
     if a.cmd == "preview":
         from vdub import tts
         emit("done", file=tts.preview(a.voice))
+        return
+
+    if a.cmd == "music":
+        from vdub import music
+        emit("done", tracks=music.ensure())
+        return
+
+    if a.cmd == "download":
+        from vdub import download
+        projects, errors = download.run(a.url, a.workspace, settings)
+        emit("done", projects=projects, errors=errors)
         return
 
     if a.cmd == "new":
@@ -87,12 +108,25 @@ def main():
         emit("done", **cover.detect(proj))
         return
 
+    if a.cmd == "caption":
+        from vdub import caption
+        emit("done", **caption.run(proj, settings))
+        return
+
+    if a.cmd == "plan":
+        emit("done", steps=plan(proj, a.start))
+        return
+
     if a.cmd == "run":
         # Mỗi bước chạy ở tiến trình riêng: faster-whisper (ctranslate2) và torch/demucs mang 2 bản cuDNN khác nhau,
         # nạp chung một tiến trình sẽ crash; tách ra cũng giải phóng hết VRAM giữa các bước.
-        for s in PIPELINE[PIPELINE.index(a.start):]:
-            if s == "separate" and not Project(a.project).opt.get("keep_background"):
-                continue
+        steps = plan(proj, a.start)
+        emit("plan", steps=steps)
+        mode = proj.opt.get("mode", "dub")
+        i = 0
+        while i < len(steps):
+            s = steps[i]
+            i += 1
             emit("step", step=s)
             cmd = [sys.executable, __file__, s, "--project", a.project]
             if a.settings:
@@ -113,6 +147,12 @@ def main():
                 sys.exit(1)
             if code:
                 raise RuntimeError(f"Bước {s} bị dừng đột ngột (mã {code})")
+            # bước vừa chạy có thể đổi chế độ (video không có lời nói → thuyết minh): lập lại các bước còn lại
+            fresh = Project(a.project)
+            if fresh.opt.get("mode", "dub") != mode:
+                mode = fresh.opt.get("mode", "dub")
+                steps = [*steps[:i], *plan(fresh, "")]
+                emit("plan", steps=steps)
         emit("done", project=str(proj.dir))
         return
 

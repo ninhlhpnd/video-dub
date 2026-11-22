@@ -41,7 +41,7 @@ def _text_rows(g):
 def detect(proj: Project):
     vw, vh = proj.meta["width"], proj.meta["height"]
     h = int(round(W * vh / vw / 2) * 2)
-    dur = proj.meta["duration"]
+    dur = proj.duration
     segs = proj.segments()
     # lấy khung hình ở giữa các câu thoại (lúc đó hardsub đang hiện), không có thì rải đều
     times = [(s["start"] + s["end"]) / 2 for s in segs] or []
@@ -51,7 +51,7 @@ def detect(proj: Project):
 
     profiles, frames = [], []
     for k, t in enumerate(times):
-        g = _frame(proj.meta["video"], t, h)
+        g = _frame(proj.video, t, h)
         if g is not None:
             profiles.append(_text_rows(g))
             frames.append(t)
@@ -91,7 +91,7 @@ def detect(proj: Project):
     # ảnh xem trước: khung hình có nhiều chữ nhất trong vùng vừa tìm
     a, b = int(top * h), int(bottom * h)
     best = frames[int(np.argmax(P[:, a:b + 1].sum(1)))]
-    run_ffmpeg(["-ss", f"{best:.2f}", "-i", proj.meta["video"], "-frames:v", "1",
+    run_ffmpeg(["-ss", f"{best:.2f}", "-i", proj.video, "-frames:v", "1",
                 "-vf", "scale=480:-2", proj.path("cover_preview.jpg")])
 
     o = proj.meta["options"]

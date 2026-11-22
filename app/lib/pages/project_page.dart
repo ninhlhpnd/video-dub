@@ -1,7 +1,6 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -9,6 +8,9 @@ import '../engine.dart';
 import '../jobs.dart';
 import '../main.dart';
 import '../models.dart';
+import 'music_dialog.dart';
+import 'overlay_dialog.dart';
+import 'preview_panel.dart';
 import 'upload_dialog.dart';
 
 const charsPerSec = 15; // giống engine/translate.py
@@ -76,6 +78,7 @@ class _ProjectPageState extends State<ProjectPage> {
           action: SnackBarAction(label: 'Xem', onPressed: () => Process.run('explorer', [pr.output])),
         ));
       }
+      if (_wasRunning && !j.running) _previewRev++;
       _wasRunning = j.running;
     }
     if (j != null && j.logs.length != _lastLogCount) {
@@ -111,6 +114,64 @@ class _ProjectPageState extends State<ProjectPage> {
     dirty = false;
   }
 
+  // ---------------- Xem trước & chỉnh thời điểm câu ----------------
+
+  int _previewRev = 0; // tăng lên để khung xem trước nạp lại file (sau khi chạy xong, đổi nhạc/âm lượng...)
+
+  /// Đổi giây bắt đầu của một câu (giữ nguyên độ dài khung của câu).
+  void _moveSeg(Map<String, dynamic> s, double start) {
+    final old = (s['start'] as num).toDouble();
+    start = start.clamp(0.0, pr.duration);
+    s['start'] = start;
+    s['end'] = ((s['end'] as num).toDouble() + start - old).clamp(start + 0.3, pr.duration + 2);
+    dirty = true;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 700), _saveEdits);
+    setState(() {});
+  }
+
+  Future<void> _editStart(Map<String, dynamic> s) async {
+    final c = TextEditingController(text: (s['start'] as num).toStringAsFixed(1));
+    final v = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Câu #${s['id']} bắt đầu ở giây'),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(suffixText: 'giây', helperText: 'Video dài ${pr.duration.toStringAsFixed(1)} giây'),
+          onSubmitted: (t) => Navigator.pop(ctx, double.tryParse(t.replaceAll(',', '.'))),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, double.tryParse(c.text.replaceAll(',', '.'))),
+              child: const Text('Đặt')),
+        ],
+      ),
+    );
+    c.dispose();
+    if (v != null) _moveSeg(s, v);
+  }
+
+  Widget _previewPanel() {
+    if (running) {
+      // trong lúc engine chạy phải nhả file âm thanh (engine sẽ ghi đè), nên tạm tắt xem trước
+      return const Card(
+        child: Center(
+          child: Text('Đang xử lý — xem trước sẽ mở lại khi xong.', style: TextStyle(color: Colors.white38)),
+        ),
+      );
+    }
+    return PreviewPanel(
+      key: ValueKey(_previewRev),
+      project: pr,
+      segs: segs,
+      onMove: _moveSeg,
+    );
+  }
+
   Future<void> _run(List<String> args) async {
     if (running) return;
     _saveTimer?.cancel();
@@ -121,19 +182,20 @@ class _ProjectPageState extends State<ProjectPage> {
     await jobs.start(pr, args, plan);
   }
 
-  List<String> get _activeSteps =>
-      pipelineSteps.where((s) => s != 'separate' || pr.options['keep_background'] != false).toList();
+  List<String> get _activeSteps => pr.activeSteps;
 
   String? get _firstPending => _activeSteps.cast<String?>().firstWhere((s) => !pr.done(s!), orElse: () => null);
 
   Future<void> _rerunFrom(String step) async {
     var args = ['run', '--from', step];
-    if (step == 'translate' && segs.any((s) => (s['vi'] ?? '').toString().isNotEmpty)) {
+    if ((step == 'translate' || step == 'script') && segs.any((s) => (s['vi'] ?? '').toString().isNotEmpty)) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-          title: const Text('Dịch lại toàn bộ?'),
-          content: const Text('Bản dịch hiện tại (kể cả phần bạn đã sửa tay) sẽ bị thay thế.'),
+          title: Text(step == 'script' ? 'Viết lại lời kể?' : 'Dịch lại toàn bộ?'),
+          content: Text(step == 'script'
+              ? 'AI sẽ xem lại video và viết lời kể mới; lời kể hiện tại (kể cả phần đã sửa tay) sẽ bị thay thế.'
+              : 'Bản dịch hiện tại (kể cả phần bạn đã sửa tay) sẽ bị thay thế.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Hủy')),
             FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Dịch lại')),
@@ -148,6 +210,7 @@ class _ProjectPageState extends State<ProjectPage> {
 
   void _opt(String k, dynamic v) {
     pr.setOption(k, v);
+    _previewRev++; // nạp lại xem trước theo tùy chọn mới (nhạc, âm lượng, phụ đề...)
     setState(() {});
   }
 
@@ -206,7 +269,13 @@ class _ProjectPageState extends State<ProjectPage> {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [Expanded(child: _segmentsCard()), const SizedBox(height: 10), _logPanel()],
+                children: [
+                  Expanded(flex: 6, child: _previewPanel()),
+                  const SizedBox(height: 10),
+                  Expanded(flex: 4, child: _segmentsCard()),
+                  const SizedBox(height: 10),
+                  _logPanel(),
+                ],
               ),
             ),
           ],
@@ -234,7 +303,7 @@ class _ProjectPageState extends State<ProjectPage> {
               icon: Icon(first == null ? Icons.check : Icons.auto_awesome),
               label: Text(first == null
                   ? 'Đã hoàn tất'
-                  : first == 'transcribe'
+                  : first == _activeSteps.first
                       ? 'Bắt đầu tự động'
                       : 'Chạy tiếp từ "${stepNames[first]}"'),
             ),
@@ -288,9 +357,14 @@ class _ProjectPageState extends State<ProjectPage> {
           Row(children: [
             const Icon(Icons.timer_outlined, size: 14, color: Colors.white60),
             const SizedBox(width: 4),
-            Text('Đã chạy ${fmtDuration(j.elapsed)}', style: dim),
-            const Spacer(),
-            if (eta != null) Text('Bước này còn ~${fmtDuration(eta)}', style: dim),
+            Flexible(child: Text('Đã chạy ${fmtDuration(j.elapsed)}', style: dim, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 8),
+            if (eta != null)
+              Flexible(
+                flex: 2,
+                child: Text('Bước này còn ~${fmtDuration(eta)}',
+                    style: dim, textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
+              ),
           ]),
         ]),
       ),
@@ -328,8 +402,150 @@ class _ProjectPageState extends State<ProjectPage> {
 
   // ---------------- Tùy chọn ----------------
 
+  List<Widget> _dubOptions(Map<String, dynamic> o) => [
+        DropdownButtonFormField<String>(
+          initialValue: sourceLangs.containsKey(o['source_lang']) ? o['source_lang'] : 'auto',
+          decoration: const InputDecoration(labelText: 'Ngôn ngữ gốc'),
+          items: sourceLangs.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+          onChanged: running ? null : (v) => _opt('source_lang', v),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          initialValue: (o['translate_note'] ?? '').toString(),
+          decoration: const InputDecoration(
+            labelText: 'Ghi chú khi dịch (tùy chọn)',
+            hintText: 'VD: video nấu ăn, xưng "mình - các bạn", giữ nguyên tên riêng',
+          ),
+          maxLines: 2,
+          onChanged: (v) => pr.setOption('translate_note', v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Mỗi nhân vật một giọng'),
+          subtitle: const Text('Cho phim/hội thoại: AI nghe để phân biệt người nói, nam/nữ',
+              style: TextStyle(fontSize: 12)),
+          value: o['multi_voice'] == true,
+          onChanged: running ? null : (v) => _opt('multi_voice', v),
+        ),
+        if (o['multi_voice'] == true) _speakersEditor(),
+      ];
+
+  List<Widget> _reviewOptions(Map<String, dynamic> o, double Function(String, double) val) {
+    final style = (o['review_style'] ?? reviewStyles.first).toString();
+    final minutes = val('review_minutes', 0);
+    final userScript = o['review_source'] == 'user';
+    return [
+      SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(value: false, icon: Icon(Icons.auto_awesome), label: Text('AI tự viết lời')),
+          ButtonSegment(value: true, icon: Icon(Icons.edit), label: Text('Tôi tự nhập lời')),
+        ],
+        selected: {userScript},
+        onSelectionChanged: running ? null : (s) => _opt('review_source', s.first ? 'user' : 'ai'),
+      ),
+      const SizedBox(height: 12),
+      if (userScript) ...[
+        TextFormField(
+          initialValue: (o['review_user_script'] ?? '').toString(),
+          decoration: const InputDecoration(
+            labelText: 'Lời thuyết minh của bạn',
+            hintText: 'Dán hoặc gõ lời thuyết minh. Mỗi câu (hoặc mỗi dòng) sẽ thành một đoạn đọc riêng.',
+            alignLabelWithHint: true,
+          ),
+          minLines: 5,
+          maxLines: 12,
+          onChanged: (v) => pr.setOption('review_user_script', v),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Bấm "Bắt đầu tự động": app tách câu, nhờ AI đặt mỗi câu vào đúng cảnh (không có AI thì chia đều), rồi lồng tiếng. '
+          'Sau đó kéo từng câu trên thanh thời gian để chỉnh giây bắt đầu.',
+          style: TextStyle(fontSize: 12, color: Colors.white38),
+        ),
+      ] else ...[
+      DropdownButtonFormField<String>(
+        initialValue: reviewStyles.contains(style) ? style : reviewStyles.first,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Phong cách lời kể'),
+        items: reviewStyles
+            .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
+            .toList(),
+        onChanged: running ? null : (v) => _opt('review_style', v),
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        initialValue: (o['review_note'] ?? '').toString(),
+        decoration: const InputDecoration(
+          labelText: 'Ghi chú cho AI (tùy chọn)',
+          hintText: 'VD: tên phim, tên nhân vật, xưng "tui", không spoil kết',
+        ),
+        maxLines: 2,
+        onChanged: (v) => pr.setOption('review_note', v),
+      ),
+      _slider(
+        minutes == 0 ? 'Độ dài: kể trên toàn bộ video' : 'Độ dài: cắt ghép cảnh chính thành ~${minutes.round()} phút',
+        minutes, 0, 30, 'review_minutes', (v) => v == 0 ? 'Toàn bộ' : '${v.round()} phút',
+        divisions: 30,
+      ),
+      Text('Phim gốc dài ${fmtTime(pr.duration, ms: false)}. Chọn số phút > 0 để AI chọn cảnh và tự cắt ghép (tóm tắt phim).',
+          style: const TextStyle(fontSize: 12, color: Colors.white38)),
+      ],
+    ];
+  }
+
+  Widget _speakersEditor() {
+    final sp = pr.speakers;
+    if (sp.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 8),
+        child: Text('Danh sách nhân vật sẽ hiện ở đây sau bước "Phân biệt nhân vật".',
+            style: TextStyle(fontSize: 12, color: Colors.white38)),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.04), borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (final e in sp.entries) ...[
+          Text('Nhân vật ${e.key} · ${e.value['gender'] ?? ''} ${e.value['age'] ?? ''}',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          if ((e.value['desc'] ?? '').toString().isNotEmpty)
+            Text(e.value['desc'].toString(), style: const TextStyle(fontSize: 12, color: Colors.white54)),
+          Row(children: [
+            Expanded(
+              child: DropdownButton<String>(
+                value: voices.containsKey(e.value['voice']) ? e.value['voice'] : voices.keys.first,
+                isExpanded: true,
+                isDense: true,
+                menuMaxHeight: 420,
+                items: voices.entries
+                    .map((v) => DropdownMenuItem(value: v.key, child: Text(v.value, overflow: TextOverflow.ellipsis)))
+                    .toList(),
+                onChanged: running
+                    ? null
+                    : (v) {
+                        pr.setSpeakerVoice(e.key, v!);
+                        setState(() {});
+                      },
+              ),
+            ),
+            IconButton(
+              tooltip: 'Nghe thử',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.play_circle_outline, size: 20),
+              onPressed: previewing ? null : () => _preview((e.value['voice'] ?? voices.keys.first).toString()),
+            ),
+          ]),
+          const SizedBox(height: 6),
+        ],
+      ]),
+    );
+  }
+
   Widget _optionsCard() {
     final o = pr.options;
+    final review = pr.isReview;
     final music = (o['music'] ?? '').toString();
     double val(String k, double d) => (o[k] as num?)?.toDouble() ?? d;
     return Card(
@@ -338,22 +554,23 @@ class _ProjectPageState extends State<ProjectPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('Tùy chọn', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 14),
-          DropdownButtonFormField<String>(
-            initialValue: sourceLangs.containsKey(o['source_lang']) ? o['source_lang'] : 'auto',
-            decoration: const InputDecoration(labelText: 'Ngôn ngữ gốc'),
-            items: sourceLangs.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-            onChanged: running ? null : (v) => _opt('source_lang', v),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'dub', icon: Icon(Icons.record_voice_over), label: Text('Lồng tiếng')),
+              ButtonSegment(value: 'review', icon: Icon(Icons.movie), label: Text('Thuyết minh / Review')),
+            ],
+            selected: {review ? 'review' : 'dub'},
+            onSelectionChanged: running ? null : (s) => _opt('mode', s.first),
           ),
-          const SizedBox(height: 12),
-          TextFormField(
-            initialValue: (o['translate_note'] ?? '').toString(),
-            decoration: const InputDecoration(
-              labelText: 'Ghi chú khi dịch (tùy chọn)',
-              hintText: 'VD: video nấu ăn, xưng "mình - các bạn", giữ nguyên tên riêng',
-            ),
-            maxLines: 2,
-            onChanged: (v) => pr.setOption('translate_note', v),
+          const SizedBox(height: 6),
+          Text(
+            review
+                ? 'AI xem hình và tự viết lời thuyết minh/lời kể tiếng Việt (dùng cho video chỉ có nhạc, video sản phẩm, review phim). Tiếng gốc nhỏ lại khi có lời đọc.'
+                : 'Dịch lời thoại sang tiếng Việt và lồng tiếng đúng thời điểm.',
+            style: const TextStyle(fontSize: 12, color: Colors.white38),
           ),
+          const SizedBox(height: 14),
+          if (review) ..._reviewOptions(o, val) else ..._dubOptions(o),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
@@ -361,7 +578,10 @@ class _ProjectPageState extends State<ProjectPage> {
                 initialValue: voices.containsKey(o['voice']) ? o['voice'] : voices.keys.first,
                 isExpanded: true,
                 menuMaxHeight: 420,
-                decoration: const InputDecoration(labelText: 'Giọng đọc'),
+                decoration: InputDecoration(
+                    labelText: review
+                        ? 'Giọng người kể'
+                        : (o['multi_voice'] == true ? 'Giọng mặc định' : 'Giọng đọc')),
                 items: voices.entries
                     .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis)))
                     .toList(),
@@ -390,15 +610,29 @@ class _ProjectPageState extends State<ProjectPage> {
               (v) => '${v.toStringAsFixed(2)}x'),
           _slider('Âm lượng giọng Việt', val('voice_volume', 1.0), 0.3, 2.0, 'voice_volume', _pct),
           const Divider(height: 24),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Giữ tiếng động/nhạc gốc'),
-            subtitle: const Text('Chỉ xóa giọng nói gốc', style: TextStyle(fontSize: 12)),
-            value: o['keep_background'] != false,
-            onChanged: running ? null : (v) => _opt('keep_background', v),
-          ),
-          if (o['keep_background'] != false)
-            _slider('Âm lượng nền gốc', val('bg_volume', 1.0), 0, 1.5, 'bg_volume', _pct),
+          if (review) ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Xóa thoại gốc của phim'),
+              subtitle: const Text('Chỉ giữ nhạc/tiếng động phim (tách bằng AI, lâu hơn)', style: TextStyle(fontSize: 12)),
+              value: o['review_remove_voice'] == true,
+              onChanged: running ? null : (v) => _opt('review_remove_voice', v),
+            ),
+            if (o['review_remove_voice'] == true)
+              _slider('Âm lượng nhạc/tiếng động phim', val('bg_volume', 1.0), 0, 1.5, 'bg_volume', _pct)
+            else
+              _slider('Âm lượng tiếng phim gốc', val('orig_volume', 0.3), 0, 1, 'orig_volume', _pct),
+          ] else ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Giữ tiếng động/nhạc gốc'),
+              subtitle: const Text('Chỉ xóa giọng nói gốc', style: TextStyle(fontSize: 12)),
+              value: o['keep_background'] != false,
+              onChanged: running ? null : (v) => _opt('keep_background', v),
+            ),
+            if (o['keep_background'] != false)
+              _slider('Âm lượng nền gốc', val('bg_volume', 1.0), 0, 1.5, 'bg_volume', _pct),
+          ],
           const Divider(height: 24),
           Row(children: [
             const Icon(Icons.music_note, size: 20),
@@ -414,8 +648,9 @@ class _ProjectPageState extends State<ProjectPage> {
               onPressed: running
                   ? null
                   : () async {
-                      final f = await FilePicker.pickFile(type: FileType.audio, dialogTitle: 'Chọn nhạc nền');
-                      if (f?.path != null) _opt('music', f!.path);
+                      final f = await showDialog<String>(
+                          context: context, builder: (_) => MusicDialog(current: (o['music'] ?? '').toString()));
+                      if (f != null) _opt('music', f);
                     },
               child: const Text('Chọn'),
             ),
@@ -442,6 +677,8 @@ class _ProjectPageState extends State<ProjectPage> {
                   },
           ),
           if (o['cover_subs'] == true) _coverEditor(),
+          const Divider(height: 24),
+          _overlaySection(),
           const SizedBox(height: 4),
           const Text('Đổi tùy chọn giọng/âm lượng/nhạc xong, bấm "Lồng tiếng lại & xuất" để áp dụng.',
               style: TextStyle(fontSize: 12, color: Colors.white38)),
@@ -465,6 +702,78 @@ class _ProjectPageState extends State<ProjectPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Không nghe thử được: ${ev.msg}')));
     }
+  }
+
+  // ---------------- Chữ Trung trên video & tên kênh ----------------
+
+  Widget _overlaySection() {
+    final o = pr.options;
+    final items = pr.loadOverlays();
+    final counts = <String, int>{};
+    for (final it in items) {
+      counts[it['action'].toString()] = (counts[it['action'].toString()] ?? 0) + 1;
+    }
+    final summary = overlayActions.entries
+        .where((e) => (counts[e.key] ?? 0) > 0)
+        .map((e) => '${counts[e.key]} ${e.value.toLowerCase()}')
+        .join(' · ');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Xử lý chữ Trung trên video'),
+        subtitle: const Text('Tự dò tiêu đề, nhãn, phụ đề in trên hình → dịch, xóa hoặc thay bằng tên kênh',
+            style: TextStyle(fontSize: 12)),
+        value: o['fix_overlays'] == true,
+        onChanged: running ? null : (v) => _opt('fix_overlays', v),
+      ),
+      if (o['fix_overlays'] == true) ...[
+        Text(
+          items.isEmpty
+              ? (pr.done('overlays') ? 'Không thấy chữ Trung nào.' : 'Chưa dò. Bấm "Dò chữ" hoặc cứ chạy, app tự dò.')
+              : 'Tìm thấy ${items.length} dòng: $summary',
+          style: const TextStyle(fontSize: 12, color: Colors.white60),
+        ),
+        const SizedBox(height: 6),
+        Row(children: [
+          OutlinedButton.icon(
+            onPressed: running ? null : () async => _run(['overlays']),
+            icon: const Icon(Icons.document_scanner_outlined, size: 18),
+            label: Text(items.isEmpty ? 'Dò chữ' : 'Dò lại'),
+          ),
+          const SizedBox(width: 8),
+          if (items.isNotEmpty)
+            FilledButton.tonalIcon(
+              onPressed: running
+                  ? null
+                  : () async {
+                      await showDialog<bool>(context: context, builder: (_) => OverlayDialog(project: pr));
+                      setState(() {});
+                    },
+              icon: const Icon(Icons.edit_note, size: 18),
+              label: const Text('Xem & sửa'),
+            ),
+        ]),
+      ],
+      const SizedBox(height: 12),
+      TextFormField(
+        initialValue: (o['channel_name'] ?? '').toString(),
+        decoration: const InputDecoration(labelText: 'Tên kênh của bạn', hintText: 'VD: Bếp Nhà Mình'),
+        onChanged: (v) => pr.setOption('channel_name', v.trim()),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Gắn tên kênh ở góc video'),
+        value: o['channel_watermark'] == true,
+        onChanged: running ? null : (v) => _opt('channel_watermark', v),
+      ),
+      if (o['channel_watermark'] == true)
+        DropdownButtonFormField<String>(
+          initialValue: channelPositions.containsKey(o['channel_pos']) ? o['channel_pos'] : 'top-right',
+          decoration: const InputDecoration(labelText: 'Vị trí'),
+          items: channelPositions.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+          onChanged: running ? null : (v) => _opt('channel_pos', v),
+        ),
+    ]);
   }
 
   // ---------------- Che phụ đề gốc ----------------
@@ -610,7 +919,8 @@ class _ProjectPageState extends State<ProjectPage> {
     ]);
   }
 
-  Widget _slider(String label, double value, double min, double max, String key, String Function(double) fmt) {
+  Widget _slider(String label, double value, double min, double max, String key, String Function(double) fmt,
+      {int? divisions}) {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -622,7 +932,7 @@ class _ProjectPageState extends State<ProjectPage> {
           value: value.clamp(min, max),
           min: min,
           max: max,
-          divisions: ((max - min) * 20).round(),
+          divisions: divisions ?? ((max - min) * 20).round(),
           onChanged: running ? null : (v) => setState(() => (pr.options)[key] = double.parse(v.toStringAsFixed(2))),
           onChangeEnd: running ? null : (v) => _opt(key, double.parse(v.toStringAsFixed(2))),
         ),
@@ -640,13 +950,13 @@ class _ProjectPageState extends State<ProjectPage> {
       }
     }
     final shown = onlyOver ? overIdx : List.generate(segs.length, (i) => i);
-    final canRedub = !running && pr.done('translate');
+    final canRedub = !running && pr.done(pr.isReview ? 'script' : 'translate');
     return Card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
           child: Row(children: [
-            Text('Phụ đề (${segs.length} câu)', style: Theme.of(context).textTheme.titleMedium),
+            Text(pr.isReview ? 'Lời kể (${segs.length} câu)' : 'Phụ đề (${segs.length} câu)', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(width: 12),
             if (overIdx.isNotEmpty)
               FilterChip(
@@ -667,7 +977,9 @@ class _ProjectPageState extends State<ProjectPage> {
         Expanded(
           child: segs.isEmpty
               ? Center(
-                  child: Text(running ? 'Đang xử lý...' : 'Bấm "Bắt đầu tự động" để nhận dạng và dịch phụ đề',
+                  child: Text(running ? 'Đang xử lý...' : pr.isReview
+                          ? 'Bấm "Bắt đầu tự động" để AI xem video và viết lời kể'
+                          : 'Bấm "Bắt đầu tự động" để nhận dạng và dịch phụ đề',
                       style: const TextStyle(color: Colors.white38)),
                 )
               : ListView.separated(
@@ -678,6 +990,37 @@ class _ProjectPageState extends State<ProjectPage> {
                 ),
         ),
       ]),
+    );
+  }
+
+  /// Nhân vật nói câu này (bấm để đổi nếu AI nhận nhầm).
+  Widget _speakerChip(Map<String, dynamic> s) {
+    final cur = (s['speaker'] ?? '').toString();
+    final sp = pr.speakers[cur];
+    final female = sp?['gender'] == 'nữ';
+    return PopupMenuButton<String>(
+      tooltip: 'Đổi nhân vật nói câu này',
+      enabled: !running,
+      onSelected: (k) {
+        s['speaker'] = k;
+        s.remove('tts_key'); // giọng đổi → đọc lại câu này
+        dirty = true;
+        _saveEdits();
+        setState(() {});
+      },
+      itemBuilder: (_) => [
+        for (final e in pr.speakers.entries)
+          PopupMenuItem(value: e.key, child: Text('${e.key} · ${e.value['gender'] ?? ''} · ${voices[e.value['voice']] ?? ''}')),
+      ],
+      child: Container(
+        margin: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: (female ? Colors.pinkAccent : Colors.lightBlueAccent).withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(cur.isEmpty ? '?' : '$cur ${female ? '♀' : '♂'}', style: const TextStyle(fontSize: 11)),
+      ),
     );
   }
 
@@ -695,18 +1038,31 @@ class _ProjectPageState extends State<ProjectPage> {
           width: 78,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('#$id', style: const TextStyle(fontSize: 12, color: Colors.white38)),
-            Text(fmtTime(s['start'] as num), style: const TextStyle(fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+            Tooltip(
+              message: 'Bấm để đặt giây bắt đầu của câu này',
+              child: InkWell(
+                onTap: running ? null : () => _editStart(s),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(fmtTime(s['start'] as num),
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.lightBlueAccent, fontFeatures: [FontFeature.tabularFigures()])),
+                  const Icon(Icons.edit, size: 11, color: Colors.lightBlueAccent),
+                ]),
+              ),
+            ),
             Text(fmtTime(s['end'] as num),
                 style: const TextStyle(fontSize: 12, color: Colors.white54, fontFeatures: [FontFeature.tabularFigures()])),
+            if (!pr.isReview && pr.options['multi_voice'] == true && pr.speakers.isNotEmpty) _speakerChip(s),
           ]),
         ),
-        Expanded(
-          flex: 4,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 6, right: 12),
-            child: SelectableText(s['text']?.toString() ?? '', style: const TextStyle(color: Colors.white60)),
+        if (!pr.isReview)
+          Expanded(
+            flex: 4,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6, right: 12),
+              child: SelectableText(s['text']?.toString() ?? '', style: const TextStyle(color: Colors.white60)),
+            ),
           ),
-        ),
         Expanded(
           flex: 5,
           child: TextField(

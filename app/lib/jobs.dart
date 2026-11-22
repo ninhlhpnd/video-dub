@@ -7,7 +7,7 @@ import 'models.dart';
 /// Một lượt chạy engine cho một project. Vẫn chạy tiếp khi người dùng rời màn hình project.
 class Job {
   final String dir;
-  final List<String> plan; // các bước sẽ chạy, để tính "bước x/y"
+  List<String> plan; // các bước sẽ chạy, để tính "bước x/y" (engine gửi lại danh sách chính xác)
   final engine = Engine();
   final logs = <String>[];
   final DateTime startedAt = DateTime.now();
@@ -67,6 +67,8 @@ class JobManager extends ChangeNotifier {
     notifyListeners();
     await for (final ev in job.engine.run([...args, '--project', pr.dir], engineOverride: settings.get('engine_dir'))) {
       switch (ev.type) {
+        case 'plan':
+          job.plan = (ev.data['steps'] as List).cast<String>();
         case 'step':
           job.step = ev.step;
           job.pct = 0;

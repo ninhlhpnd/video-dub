@@ -15,7 +15,7 @@ def run(proj: Project, settings):
 
     src = proj.path("audio44.wav")
     progress(STEP, 0, "Đang tách âm thanh...")
-    run_ffmpeg(["-i", proj.meta["video"], "-vn", "-ac", "2", "-ar", "44100", src])
+    run_ffmpeg(["-i", proj.video, "-vn", "-ac", "2", "-ar", "44100", src])
 
     progress(STEP, 2, "Đang nạp mô hình tách giọng (lần đầu tải ~80MB)...")
     model = get_model("htdemucs")

@@ -15,3 +15,8 @@ lameenc==1.9.0
 openunmix==1.3.0
 pyyaml==6.0.3
 tqdm==4.70.1
+# tải video từ link; các trang hay đổi cách chặn nên cần cập nhật thường xuyên: uv pip install -U yt-dlp
+yt-dlp>=2026.10.26
+# dò chữ Trung in trên video (bước overlays), chạy trên CPU
+onnxruntime==1.31.0
+rapidocr==3.10.0

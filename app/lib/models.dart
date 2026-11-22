@@ -3,16 +3,62 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-const pipelineSteps = ['transcribe', 'translate', 'separate', 'tts', 'render'];
+/// Các bước của từng chế độ — giống PIPELINES/steps_for trong engine/vdub/common.py.
+const pipelines = {
+  'dub': ['transcribe', 'speakers', 'translate', 'overlays', 'separate', 'tts', 'render'],
+  'review': ['script', 'overlays', 'separate', 'tts', 'render'],
+};
+
+bool wantsSeparate(Map<String, dynamic> o) =>
+    o['mode'] == 'review' ? o['review_remove_voice'] == true : o['keep_background'] != false;
+
+List<String> stepsFor(Map<String, dynamic> o) {
+  final mode = o['mode'] == 'review' ? 'review' : 'dub';
+  return pipelines[mode]!
+      .where((s) => s != 'separate' || wantsSeparate(o))
+      .where((s) => s != 'speakers' || o['multi_voice'] == true)
+      .where((s) => s != 'overlays' || o['fix_overlays'] == true)
+      .toList();
+}
+
+/// Cách xử lý một dòng chữ Trung trên video (khớp action trong engine/vdub/overlays.py).
+const overlayActions = {
+  'translate': 'Dịch sang tiếng Việt',
+  'remove': 'Xóa',
+  'channel': 'Thay bằng tên kênh',
+  'keep': 'Giữ nguyên',
+};
+
+const channelPositions = {
+  'top-left': 'Góc trên trái',
+  'top-right': 'Góc trên phải',
+  'bottom-left': 'Góc dưới trái',
+  'bottom-right': 'Góc dưới phải',
+};
+
 const stepNames = {
   'transcribe': 'Nhận dạng lời',
+  'speakers': 'Phân biệt nhân vật',
   'translate': 'Dịch tiếng Việt',
+  'script': 'AI xem phim & viết lời kể',
+  'overlays': 'Xử lý chữ trên video',
   'separate': 'Xóa giọng gốc',
   'tts': 'Lồng tiếng',
   'render': 'Xuất video',
   'youtube': 'YouTube',
   'facebook': 'Facebook',
 };
+
+const reviewStyles = [
+  'Tự chọn giọng văn hợp với nội dung video (bán hàng, hướng dẫn, du lịch, phim...)',
+  'Giới thiệu sản phẩm hào hứng, nêu công dụng nổi bật, kết bằng lời kêu gọi mua',
+  'Thuyết minh rõ ràng, dễ hiểu, như hướng dẫn từng bước',
+  'Kể chuyện hấp dẫn, giọng văn review phim trên TikTok',
+  'Hài hước, bình luận dí dỏm, hơi "cà khịa" nhân vật',
+  'Kịch tính, hồi hộp, nhấn mạnh các nút thắt',
+  'Nhẹ nhàng, cảm xúc, sâu lắng',
+  'Ngắn gọn, đi thẳng vào nội dung chính',
+];
 
 /// Giọng đọc. "vieneu:..." chạy trên máy (miễn phí, không giới hạn);
 /// còn lại là Edge TTS online, dạng "tên|cao độ|tốc độ".
@@ -97,10 +143,22 @@ class Project {
   String get name => meta['name']?.toString() ?? p.basename(dir);
   String get created => meta['created']?.toString() ?? '';
   String get video => meta['video']?.toString() ?? '';
-  double get duration => (meta['duration'] as num?)?.toDouble() ?? 0;
+  /// Độ dài video đang làm việc (bản cắt ghép nếu đã tóm tắt phim).
+  double get duration => ((meta['edited'] == true ? meta['edited_duration'] : null) ?? meta['duration'] as num?)
+          ?.toDouble() ??
+      0;
   Map<String, dynamic> get steps => (meta['steps'] as Map?)?.cast<String, dynamic>() ?? {};
   Map<String, dynamic> get options => (meta['options'] as Map?)?.cast<String, dynamic>() ?? {};
   bool done(String step) => steps[step] == 'done';
+  bool get isReview => options['mode'] == 'review';
+  List<String> get activeSteps => stepsFor(options);
+  Map<String, dynamic> get speakers => (meta['speakers'] as Map?)?.cast<String, dynamic>() ?? {};
+
+  void setSpeakerVoice(String key, String voice) {
+    reload();
+    ((meta['speakers'] as Map)[key] as Map)['voice'] = voice;
+    _write();
+  }
   String get thumb => p.join(dir, 'thumb.jpg');
   String get output => p.join(dir, 'output.mp4');
   bool get hasOutput => File(output).existsSync();
@@ -121,6 +179,16 @@ class Project {
 
   void _write() {
     File(p.join(dir, 'project.json')).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(meta));
+  }
+
+  List<Map<String, dynamic>> loadOverlays() {
+    final f = File(p.join(dir, 'overlays.json'));
+    if (!f.existsSync()) return [];
+    return (jsonDecode(f.readAsStringSync()) as List).cast<Map<String, dynamic>>();
+  }
+
+  void saveOverlays(List<Map<String, dynamic>> items) {
+    File(p.join(dir, 'overlays.json')).writeAsStringSync(const JsonEncoder.withIndent(' ').convert(items));
   }
 
   List<Map<String, dynamic>> loadSegments() {

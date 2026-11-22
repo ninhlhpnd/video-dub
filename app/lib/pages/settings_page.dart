@@ -173,6 +173,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ]),
+              _section('Tải video từ link (Douyin, RedNote...)', [
+                _hint('Douyin bắt buộc có cookie trình duyệt. Cách lấy (làm 1 lần, khi tải lỗi thì làm lại):\n'
+                    '1. Cài tiện ích "Get cookies.txt LOCALLY" cho Chrome/Edge.\n'
+                    '2. Mở douyin.com (và xiaohongshu.com nếu cần), đợi trang tải xong.\n'
+                    '3. Bấm biểu tượng tiện ích → Export → lưu file cookies.txt → chọn file đó ở dưới.\n'
+                    'File này giống "chìa khóa" tài khoản, đừng gửi cho người khác.'),
+                _field('cookies_file', 'File cookies.txt', suffix: IconButton(
+                  icon: const Icon(Icons.file_open),
+                  onPressed: () async {
+                    final f = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['txt']);
+                    if (f?.path != null) setState(() => c('cookies_file').text = f!.path!);
+                  },
+                )),
+              ]),
               _section('Nâng cao', [
                 _field('engine_dir', 'Thư mục engine (để trống = tự tìm)'),
               ]),

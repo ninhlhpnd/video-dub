@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../engine.dart';
@@ -74,6 +75,79 @@ class _HomePageState extends State<HomePage> {
     _refresh();
     if (last != null && paths.length == 1) _open(last);
   }
+
+  Future<void> _pasteLink() async {
+    final ctrl = TextEditingController();
+    final clip = await Clipboard.getData(Clipboard.kTextPlain);
+    if ((clip?.text ?? '').contains('http')) ctrl.text = clip!.text!; // có sẵn link trong clipboard thì dán luôn
+    if (!mounted) return;
+    final text = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Tải video từ link'),
+        content: SizedBox(
+          width: 560,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text(
+                'Dán link Douyin, Xiaohongshu (RedNote), TikTok, YouTube… Dán nguyên đoạn chữ "chia sẻ" cũng được, '
+                'nhiều link thì mỗi link một dòng.',
+                style: TextStyle(fontSize: 13, color: Colors.white70)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              minLines: 3,
+              maxLines: 8,
+              decoration: const InputDecoration(hintText: 'https://v.douyin.com/... hoặc http://xhslink.com/...'),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Hủy')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(c, ctrl.text),
+            icon: const Icon(Icons.download),
+            label: const Text('Tải về'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (text == null || text.trim().isEmpty) return;
+
+    setState(() => busy = 'Đang lấy thông tin video...');
+    EngineEvent? end;
+    await for (final ev in Engine().run(['download', '--url', text, '--workspace', settings.workspace],
+        engineOverride: settings.get('engine_dir'))) {
+      if (ev.type == 'progress' && ev.msg.isNotEmpty) setState(() => busy = ev.msg);
+      if (ev.type == 'log') setState(() => busy = ev.msg);
+      if (ev.type == 'done' || ev.type == 'error') end = ev;
+    }
+    setState(() => busy = null);
+    _refresh();
+    if (end == null || end.type == 'error') {
+      _showError('Không tải được video', end?.msg ?? 'Engine không phản hồi');
+      return;
+    }
+    final created = (end.data['projects'] as List).cast<String>();
+    final errors = (end.data['errors'] as List).cast<String>();
+    if (errors.isNotEmpty) _showError('Có ${errors.length} link không tải được', errors.join('\n\n'));
+    if (created.length == 1 && errors.isEmpty) {
+      final pr = Project.tryLoad(created.first);
+      if (pr != null) _open(pr);
+    } else {
+      _snack('Đã tải ${created.length} video');
+    }
+  }
+
+  void _showError(String title, String msg) => showDialog(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(width: 520, child: SelectableText(msg)),
+          actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Đóng'))],
+        ),
+      );
 
   Future<void> _pick() async {
     final files = await FilePicker.pickFiles(type: FileType.video, dialogTitle: 'Chọn video cần lồng tiếng');
@@ -197,11 +271,12 @@ class _HomePageState extends State<HomePage> {
         border: Border.all(color: dragging ? c.primary : Colors.white24, width: dragging ? 2 : 1),
       ),
       child: busy != null
-          ? Center(
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
+          ? Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
                 const SizedBox(width: 14),
-                Text(busy!),
+                Flexible(child: Text(busy!, maxLines: 3, overflow: TextOverflow.ellipsis)),
               ]),
             )
           : Row(
@@ -221,13 +296,17 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(width: 30),
                 FilledButton.icon(onPressed: _pick, icon: const Icon(Icons.add), label: const Text('Chọn video')),
+                const SizedBox(width: 10),
+                FilledButton.tonalIcon(
+                    onPressed: _pasteLink, icon: const Icon(Icons.link), label: const Text('Dán link')),
               ],
             ),
     );
   }
 
   Widget _card(Project pr) {
-    final doneCount = pipelineSteps.where(pr.done).length;
+    final steps = pr.activeSteps;
+    final doneCount = steps.where(pr.done).length;
     final job = jobs.of(pr.dir);
     final thumb = File(pr.thumb);
     return Card(
@@ -293,11 +372,11 @@ class _HomePageState extends State<HomePage> {
                   Expanded(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(value: doneCount / pipelineSteps.length, minHeight: 6),
+                      child: LinearProgressIndicator(value: doneCount / steps.length, minHeight: 6),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(pr.hasOutput ? 'Đã xuất' : '$doneCount/${pipelineSteps.length}',
+                  Text(pr.hasOutput ? 'Đã xuất' : '$doneCount/${steps.length}',
                       style: TextStyle(fontSize: 12, color: pr.hasOutput ? Colors.greenAccent : Colors.white54)),
                   if (pr.uploads.isNotEmpty) ...[
                     const SizedBox(width: 6),

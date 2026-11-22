@@ -29,6 +29,33 @@ class _UploadDialogState extends State<UploadDialog> {
   final pct = <String, double>{};
   final engine = Engine();
 
+  bool writing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // chưa từng đăng → để AI viết sẵn tiêu đề/mô tả
+    if (widget.project.uploads.isEmpty) _aiWrite();
+  }
+
+  Future<void> _aiWrite() async {
+    setState(() => writing = true);
+    final ev = await Engine.once(['caption', '--project', widget.project.dir],
+        engineOverride: settings.get('engine_dir'), timeout: const Duration(seconds: 120));
+    if (!mounted) return;
+    setState(() {
+      writing = false;
+      if (ev.type == 'done') {
+        title.text = ev.data['title'].toString();
+        desc.text = ev.data['description'].toString();
+        tags.text = ev.data['tags'].toString();
+        status.remove('_');
+      } else {
+        status['_'] = 'AI chưa viết được: ${ev.msg}';
+      }
+    });
+  }
+
   @override
   void dispose() {
     title.dispose();
@@ -128,15 +155,25 @@ class _UploadDialogState extends State<UploadDialog> {
               ),
             ]),
             const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: busy || writing ? null : _aiWrite,
+                icon: writing
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.auto_awesome, size: 18),
+                label: Text(writing ? 'AI đang viết...' : 'AI viết tiêu đề & mô tả'),
+              ),
+            ),
             TextField(
               controller: title,
-              enabled: !busy,
+              enabled: !busy && !writing,
               maxLength: 100,
               decoration: const InputDecoration(labelText: 'Tiêu đề'),
             ),
             TextField(
               controller: desc,
-              enabled: !busy,
+              enabled: !busy && !writing,
               minLines: 3,
               maxLines: 6,
               decoration: const InputDecoration(labelText: 'Mô tả'),

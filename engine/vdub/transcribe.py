@@ -2,6 +2,7 @@
 from .common import Project, log, progress, run_ffmpeg, setup_cuda_dlls
 
 STEP = "transcribe"
+AUTO_STYLE = "Tự chọn giọng văn hợp với nội dung video (bán hàng, hướng dẫn, du lịch, phim...)"
 SENTENCE_END = tuple(".?!。？！…")
 SOFT_BREAK = tuple(",，、;；:：")
 
@@ -44,7 +45,7 @@ def run(proj: Project, settings):
         raise RuntimeError("Video không có âm thanh")
     audio = proj.path("audio16k.wav")
     progress(STEP, 0, "Đang tách âm thanh...")
-    run_ffmpeg(["-i", proj.meta["video"], "-vn", "-ac", "1", "-ar", "16000", audio])
+    run_ffmpeg(["-i", proj.video, "-vn", "-ac", "1", "-ar", "16000", audio])
 
     name = settings["whisper_model"]
     progress(STEP, 1, f"Đang nạp mô hình {name} (lần đầu sẽ tải về ~1.6GB)...")
@@ -62,6 +63,9 @@ def run(proj: Project, settings):
     words = []
     for s in segs:
         progress(STEP, 2 + s.end / max(info.duration, 1) * 97, s.text.strip()[:80])
+        # Whisper hay "nghe nhầm" nhạc thành chữ: bỏ đoạn mà chính nó đánh giá là không phải lời nói
+        if s.no_speech_prob > 0.6 and s.avg_logprob < -0.8:
+            continue
         if s.words:
             words += [{"w": w.word, "s": w.start, "e": w.end} for w in s.words]
         else:
@@ -71,6 +75,21 @@ def run(proj: Project, settings):
     for i, s in enumerate(sentences, 1):
         s["id"] = i
         s["vi"] = ""
+
+    speech = sum(s["end"] - s["start"] for s in sentences)
+    if speech < max(2.0, proj.duration * 0.05):
+        # Không có lời nói (chỉ có nhạc) → không có gì để dịch: chuyển sang cho AI xem hình và viết lời thuyết minh
+        fresh = Project(proj.dir)
+        fresh.opt.update(mode="review", review_minutes=0, review_style=AUTO_STYLE,
+                         review_remove_voice=False, orig_volume=max(0.5, float(fresh.opt.get("orig_volume", 0.3))))
+        fresh.save()
+        log("Video không có lời nói (chỉ có nhạc/tiếng động) → tự chuyển sang chế độ Thuyết minh: "
+            "AI sẽ xem hình và viết lời đọc, giữ nhạc nền gốc")
+        proj.save_segments([])
+        proj.mark(STEP)
+        progress(STEP, 100, "Không có lời nói → chuyển sang AI thuyết minh")
+        return
+
     proj.save_segments(sentences)
     proj.meta["source_lang_detected"] = info.language
     proj.save()

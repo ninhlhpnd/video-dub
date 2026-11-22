@@ -2,6 +2,12 @@
 
 App Windows: kéo thả video → nhận dạng lời → dịch tiếng Việt (giữ timeline) → xóa giọng gốc (giữ nhạc/tiếng động) → đọc tiếng Việt → nhạc nền + phụ đề (có thể che phụ đề gốc bằng dải màu) → xuất mp4 → đăng/hẹn giờ lên YouTube, Fanpage Facebook.
 
+Hai chế độ:
+- **Lồng tiếng**: dịch lời thoại và lồng tiếng. Bật "Mỗi nhân vật một giọng" thì Gemini nghe để phân biệt người nói và nam/nữ, mỗi nhân vật một giọng VieNeu.
+- **Review phim**: Gemini xem video và viết lời kể; tiếng phim gốc tự nhỏ lại khi có lời kể. Chọn số phút > 0 để AI chọn cảnh chính và tự cắt ghép (tóm tắt phim dài, xem từng đoạn 15 phút).
+
+Khi đăng bài, AI tự viết tiêu đề, mô tả ngắn gây tò mò và hashtag.
+
 ## Cài đặt trên máy mới
 Yêu cầu: Windows 10/11, Python 3.x, card NVIDIA (khuyên dùng, không có vẫn chạy bằng CPU), Flutter + Visual Studio 2022 (C++ desktop) để build app.
 
