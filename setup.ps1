@@ -19,6 +19,11 @@ python -m uv pip install --python .venv --no-deps demucs==4.1.0
 Write-Host "== 3/4 Môi trường giọng VieNeu (.venv_tts)" -ForegroundColor Cyan
 if (-not (Test-Path ".venv_tts")) { python -m uv venv --python 3.11 .venv_tts }
 python -m uv pip install --python .venv_tts -r requirements-tts.txt
+
+Write-Host "== Môi trường vẽ ảnh trên máy (.venv_img, cần card NVIDIA)" -ForegroundColor Cyan
+if (-not (Test-Path ".venv_img")) { python -m uv venv --python 3.11 .venv_img }
+python -m uv pip install --python .venv_img "torch==2.5.1" --index-url https://download.pytorch.org/whl/cu124
+python -m uv pip install --python .venv_img -r requirements-img.txt
 Pop-Location
 
 Write-Host "== 4/4 FFmpeg" -ForegroundColor Cyan

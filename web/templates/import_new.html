@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Nhập truyện Trung | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 1000px;">
+  <h1 class="page-title">{{ m.icon("translate") }} Nhập truyện Trung &amp; dịch tự động</h1>
+  <p class="page-sub">Dán link trang mục lục hoặc tải file .txt tiếng Trung. Máy chủ tự tải chương, lập bảng tên riêng (Hán Việt) rồi dịch và đăng từng chương ngay khi xong.</p>
+
+  <div class="legal"><b>Lưu ý bản quyền:</b> Bạn chỉ được nhập truyện mà bạn có quyền dịch và đăng lại (tác phẩm đã hết hạn bản quyền, được tác giả/nhà xuất bản cho phép, hoặc giấy phép mở). Người đăng chịu trách nhiệm về nội dung và sẽ gỡ truyện khi chủ sở hữu yêu cầu.</div>
+
+  {% if not has_gemini and not has_claude and default_provider != "mock" %}
+  <div class="alert error">Máy chủ chưa cấu hình <code>GEMINI_API_KEY</code> hoặc <code>CLAUDE_API_KEY</code> trong file <code>.env</code>, việc dịch sẽ báo lỗi.</div>
+  {% endif %}
+
+  <form class="card card-pad" method="post" action="/nhap-truyen" enctype="multipart/form-data">
+    {{ m.csrf_field() }}
+    <div class="grid-2">
+      <div class="field"><label for="url">Link mục lục truyện</label><input id="url" type="url" name="url" placeholder="https://…/book/12345/"><div class="hint">Trang có danh sách 第1章, 第2章… Mục lục nhiều trang sẽ tự lật trang.</div></div>
+      <div class="field"><label for="file">…hoặc file .txt tiếng Trung</label><input id="file" type="file" name="file" accept=".txt,text/plain"><div class="hint">Tự nhận UTF-8 / GBK / Big5, tách chương theo dòng 第N章.</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label for="tzh">Tên gốc <span class="muted">(không bắt buộc)</span></label><input id="tzh" type="text" name="title_zh" maxlength="200" placeholder="Lấy từ trang/tên file nếu bỏ trống"></div>
+      <div class="field"><label for="tvi">Tên tiếng Việt <span class="muted">(không bắt buộc)</span></label><input id="tvi" type="text" name="title_vi" maxlength="200" placeholder="Để trống: AI dịch tên Hán Việt"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label for="azh">Tác giả gốc <span class="muted">(không bắt buộc)</span></label><input id="azh" type="text" name="author_zh" maxlength="100"></div>
+      <div class="field"><label for="prov">AI dịch</label>
+        <select id="prov" name="provider">{% for k, label in providers.items() %}<option value="{{ k }}" {{ "selected" if k == default_provider }}>{{ label }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field" style="max-width: 300px;"><label for="first">Dịch trước bao nhiêu chương</label><input id="first" type="number" name="first_n" value="10" min="1" max="2000"><div class="hint">Sau đó bấm “Dịch tiếp” khi muốn dịch thêm để kiểm soát chi phí.</div></div>
+    <div class="field"><label class="check"><input type="checkbox" name="rights" value="1" required> Tôi xác nhận có quyền dịch và đăng lại truyện này.</label></div>
+    <button class="btn btn-lg" type="submit">{{ m.icon("translate") }} Bắt đầu nhập</button>
+  </form>
+
+  <div class="section-head" style="margin-top: 30px;"><h2>Việc dịch {{ "của tất cả" if user.role == "admin" else "của tôi" }}</h2></div>
+  {% if jobs %}
+  <div class="card table-wrap">
+    <table class="table">
+      <thead><tr><th>Truyện</th><th>Trạng thái</th><th>Tiến độ</th><th>AI</th><th>Chi phí</th><th>Cập nhật</th></tr></thead>
+      <tbody>
+      {% for j in jobs %}
+      <tr>
+        <td><a href="/nhap-truyen/{{ j.id }}"><b>{{ j.title|truncate(50) }}</b></a></td>
+        <td class="nowrap"><span class="status-dot {{ j.status }}"></span>{{ STATUS_TEXT[j.status] }}</td>
+        <td class="nowrap">{{ j.done }}/{{ j.total }}</td>
+        <td>{{ j.provider }}</td>
+        <td>{% if j.cost_usd %}${{ "%.2f"|format(j.cost_usd) }}{% else %}–{% endif %}</td>
+        <td class="small muted nowrap">{{ j.updated_at|time_ago }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="card empty"><p>Chưa có việc dịch nào.</p></div>{% endif %}
+</div>
+{% endblock %}

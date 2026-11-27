@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Đăng truyện | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 1000px;">
+  <div class="row" style="justify-content: space-between; margin: 26px 0 6px;">
+    <h1 class="page-title" style="margin: 0;">{{ m.icon("edit") }} Truyện của tôi</h1>
+    <div class="row">
+      {% if user.role in ("uploader", "admin") %}<a class="btn btn-ghost" href="/nhap-truyen">{{ m.icon("translate") }} Nhập truyện Trung</a>{% endif %}
+      <a class="btn" href="/dang-truyen/moi">{{ m.icon("plus") }} Truyện mới</a>
+    </div>
+  </div>
+  <nav class="subnav">
+    <a class="on" href="/dang-truyen">Truyện ({{ stories|length }})</a>
+    <a href="/dang-truyen/ung-ho">Ủng hộ {% if pending %}<span class="badge new">{{ pending }} chờ xác nhận</span>{% endif %}</a>
+    <a href="/tai-khoan?tab=ung-ho">Tài khoản nhận tiền</a>
+    <a href="/tai-khoan?tab=api">API key cho app</a>
+  </nav>
+  {% if stories %}
+  <div style="display: grid; gap: 12px;">
+    {% for s in stories %}
+    <div class="card mstory">
+      {{ m.cover(s) }}
+      <div style="min-width: 0;">
+        <h3 class="clamp-1"><a href="/dang-truyen/{{ s.id }}">{{ s.title }}</a></h3>
+        <div class="small muted">
+          {{ s.chapter_count }} chương đang hiện{% if s.all_chapters != s.chapter_count %} · {{ s.all_chapters - s.chapter_count }} nháp/hẹn giờ{% endif %}
+          · {{ s.views|num }} lượt đọc · {{ s.follows }} theo dõi
+        </div>
+        <div class="row" style="gap: 5px; margin-top: 6px;">
+          <span class="badge {{ 'full' if s.status == 'completed' }}">{{ STATUS_LABEL[s.status] }}</span>
+          <span class="badge">{{ ORIGIN_LABEL[s.origin] }}</span>
+          {% if s.is_hidden %}<span class="badge danger">Đang ẩn</span>{% endif %}
+          {% if not s.chapter_count %}<span class="badge danger">Chưa hiện trên trang (0 chương)</span>{% endif %}
+          {% if s.pending_donations %}<span class="badge new">{{ s.pending_donations }} ủng hộ chờ</span>{% endif %}
+        </div>
+      </div>
+      <div class="act">
+        <a class="btn btn-sm" href="/dang-truyen/{{ s.id }}/chuong/moi">{{ m.icon("plus") }} Chương</a>
+        <a class="btn btn-ghost btn-sm" href="/dang-truyen/{{ s.id }}">Quản lý</a>
+        {% if s.chapter_count %}<a class="btn btn-ghost btn-sm" href="{{ story_path(s) }}">Xem</a>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card empty">{{ m.icon("edit") }}<p>Bạn chưa có truyện nào. Viết truyện đầu tiên ngay!</p><a class="btn" href="/dang-truyen/moi">Tạo truyện</a></div>
+  {% endif %}
+</div>
+{% endblock %}

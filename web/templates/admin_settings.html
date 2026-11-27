@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Cài đặt | Quản trị{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 860px;">
+  {% include "_admin_nav.html" %}
+  <form class="card card-pad" method="post" action="/quan-tri/cai-dat">
+    {{ m.csrf_field() }}
+    <h2 style="font-size: 1.1rem;">Thông tin ủng hộ trang (/ung-ho)</h2>
+    <p class="small muted">Giá trị ở đây được ưu tiên hơn biến môi trường SITE_DONATE_*. Cũng dùng làm nơi nhận khi người đăng truyện chưa khai báo tài khoản.</p>
+    <div class="grid-2">
+      <div class="field"><label for="b">Ngân hàng</label><select id="b" name="donate_bank"><option value="">– Chọn –</option>{% for b in BANKS %}<option value="{{ b[0] }}" {{ "selected" if values.donate_bank == b[0] }}>{{ b[1] }} – {{ b[2] }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="a">Số tài khoản</label><input id="a" type="text" name="donate_account" value="{{ values.donate_account }}"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label for="n">Chủ tài khoản</label><input id="n" type="text" name="donate_name" value="{{ values.donate_name }}" placeholder="NGUYEN VAN A"></div>
+      <div class="field"><label for="mm">MoMo</label><input id="mm" type="tel" name="donate_momo" value="{{ values.donate_momo }}"></div>
+    </div>
+    <div class="field"><label for="l">Link PayPal / Ko-fi</label><input id="l" type="url" name="donate_link" value="{{ values.donate_link }}" placeholder="https://"></div>
+    <h2 style="font-size: 1.1rem; margin-top: 10px;">Thông báo đầu trang</h2>
+    <div class="field"><input type="text" name="announcement" value="{{ values.announcement }}" maxlength="500" placeholder="Để trống nếu không cần" aria-label="Thông báo đầu trang"></div>
+    <button class="btn" type="submit">Lưu cài đặt</button>
+  </form>
+</div>
+{% endblock %}

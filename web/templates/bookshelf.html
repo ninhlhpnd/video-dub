@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Tủ truyện | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 980px;">
+  <h1 class="page-title">{{ m.icon("bookmark") }} Tủ truyện</h1>
+  {% if user %}
+  <nav class="tabs-line">
+    <a class="{{ 'on' if tab == 'theo-doi' }}" href="/tu-truyen">Đang theo dõi ({{ follows|length }})</a>
+    <a class="{{ 'on' if tab == 'lich-su' }}" href="/tu-truyen?tab=lich-su">Lịch sử đọc</a>
+  </nav>
+  {% if tab == "lich-su" %}
+    {% if history %}
+    <div class="card"><ul class="update-list">
+      {% for s in history %}
+      <li><a href="{{ story_path(s) }}" tabindex="-1">{{ m.cover(s) }}</a>
+        <div style="min-width: 0;"><a class="t clamp-1" href="{{ story_path(s) }}">{{ s.title }}</a>
+          <div class="c">Đang đọc <a href="{{ chapter_path(s, s.chapter_n) }}">chương {{ s.chapter_n }}</a> / {{ s.last_chapter_n }}</div></div>
+        <div class="g"><a class="btn btn-soft btn-sm" href="{{ chapter_path(s, s.chapter_n) }}">Đọc tiếp</a></div>
+        <div class="when">{{ s.read_at|time_ago }}</div></li>
+      {% endfor %}
+    </ul></div>
+    {% else %}<div class="card empty">{{ m.icon("clock") }}<p>Bạn chưa đọc truyện nào.</p></div>{% endif %}
+  {% else %}
+    {% if follows %}
+    <div class="card"><ul class="update-list">
+      {% for s in follows %}
+      <li><a href="{{ story_path(s) }}" tabindex="-1">{{ m.cover(s) }}</a>
+        <div style="min-width: 0;">
+          <a class="t clamp-1" href="{{ story_path(s) }}">{{ s.title }} {% if s.new_count > 0 %}<span class="badge new">+{{ s.new_count }} chương mới</span>{% endif %}</a>
+          <div class="c clamp-1">Mới nhất: <a href="{{ chapter_path(s, s.last_chapter_n) }}">Chương {{ s.last_chapter_n }}{% if s.last_chapter_title %}: {{ s.last_chapter_title }}{% endif %}</a></div>
+        </div>
+        <div class="g">{% if s.read_n %}<a class="btn btn-soft btn-sm" href="{{ chapter_path(s, s.read_n) }}">Đọc tiếp ch. {{ s.read_n }}</a>{% else %}<a class="btn btn-soft btn-sm" href="{{ story_path(s) }}">Bắt đầu đọc</a>{% endif %}</div>
+        <div class="when">{{ s.last_chapter_at|time_ago }}</div></li>
+      {% endfor %}
+    </ul></div>
+    {% else %}<div class="card empty">{{ m.icon("heart") }}<p>Bạn chưa theo dõi truyện nào. Bấm “Theo dõi” ở trang truyện để nhận chương mới tại đây.</p><a class="btn" href="/danh-sach">Khám phá truyện</a></div>{% endif %}
+  {% endif %}
+  {% else %}
+  <div class="alert info">Bạn chưa đăng nhập: lịch sử đọc dưới đây chỉ lưu trên trình duyệt này. <a href="/dang-nhap?next=/tu-truyen" style="font-weight: 700; color: var(--primary);">Đăng nhập</a> để đồng bộ và theo dõi truyện.</div>
+  <div class="card"><ul class="update-list" data-local-history><li class="muted">Chưa có lịch sử đọc.</li></ul></div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}{{ title }} | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap error-page">
+  <div class="code">{{ code }}</div>
+  <h1 style="margin-top: 12px;">{{ title }}</h1>
+  {% if message and message not in ("Not Found", "Method Not Allowed") %}<p class="muted">{{ message }}</p>{% endif %}
+  <div class="row" style="justify-content: center; margin-top: 20px;">
+    <a class="btn" href="/">{{ m.icon("home") }} Về trang chủ</a>
+    <a class="btn btn-ghost" href="/danh-sach">Tìm truyện</a>
+  </div>
+</div>
+{% endblock %}

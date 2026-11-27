@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}{{ member.display_name }} (@{{ member.username }}) | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 1000px;">
+  <div class="profile-head">
+    {{ m.avatar(member, "lg") }}
+    <div>
+      <h1 style="margin: 0; font-size: 1.5rem;">{{ member.display_name }}</h1>
+      <div class="muted">@{{ member.username }} · {{ ROLE_LABEL[member.role] }} · tham gia {{ member.created_at|fmt_date }}</div>
+      {% if member.bio %}<p style="margin: 8px 0 0; white-space: pre-line;">{{ member.bio }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="section-head"><h2>{{ m.icon("book") }} Truyện đã đăng ({{ stories|length }})</h2></div>
+  {% if stories %}
+  <div class="grid-cards">{% for s in stories %}{{ m.story_card(s) }}{% endfor %}</div>
+  {% else %}<div class="card empty"><p>Chưa đăng truyện nào.</p></div>{% endif %}
+</div>
+{% endblock %}

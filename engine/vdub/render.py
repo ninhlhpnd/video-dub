@@ -123,12 +123,17 @@ def overlay_filters(proj: Project):
         a, b = max(0.0, it["start"] - 0.1), it["end"] + 0.15
         delogo.append(f"delogo=x={x0}:y={y0}:w={x1 - x0}:h={y1 - y0}:enable='between(t,{a:.2f},{b:.2f})'")
         if text:
-            # cỡ chữ theo chiều cao chữ cũ; chữ Việt dài hơn thì thu nhỏ cho vừa khoảng 92% bề ngang video
-            fs = bh * 0.95
-            fs = max(bh * 0.55, min(fs, W * 0.92 / max(1, len(text) * 0.55)))
+            # cỡ chữ theo chiều cao chữ gốc thật (trung vị qua các khung hình, không phải khung gộp);
+            # chữ Việt dài hơn thì thu nhỏ cho vừa khoảng 92% bề ngang video
+            th = it.get("th", it["h"]) * H
+            fs = max(th * 0.6, min(th * 0.9, W * 0.92 / max(1, len(text) * 0.55)))
             est = len(text) * fs * 0.55
-            cx = min(max(it["x"] * W + bw / 2, est / 2 + W * 0.04), W - est / 2 - W * 0.04)
-            cy = it["y"] * H + bh / 2
+            cx0 = it.get("cx", it["x"] + it["w"] / 2) * W
+            # chữ gốc canh trái (nằm sát mép trái) thì chữ Việt cũng canh trái theo mép đó
+            left = it["x"] * W
+            cx = left + est / 2 if left < W * 0.15 and est > it.get("tw", it["w"]) * W else cx0
+            cx = min(max(cx, est / 2 + W * 0.02), W - est / 2 - W * 0.02)
+            cy = it.get("cy", it["y"] + it["h"] / 2) * H
             clean = text.replace("{", "(").replace("}", ")")
             events.append(f"Dialogue: 1,{_ts(a, '.')},{_ts(b, '.')},Ov,,0,0,0,,"
                           f"{{\\an5\\pos({cx:.0f},{cy:.0f})\\fs{fs:.0f}\\bord{max(2, fs / 14):.1f}}}{clean}")
@@ -211,6 +216,9 @@ def run(proj: Project, settings):
     src = probe(proj.video)
     if src["hdr"]:  # video quay HDR (iPhone...): đổi về màu thường, không thì màu bị bạc/sáng trưng
         vf.append(sdr_filter(src["color_transfer"]))
+    # video tốc độ khung hình bất thường (vd 180-240 hình/giây, không đều): đưa về 30 hình/giây đều cho mượt, nhẹ file
+    if src.get("fps", 0) > 61:
+        vf.append("fps=30")
     delogo, has_ov = overlay_filters(proj)
     vf += delogo
     box = cover_box(proj)

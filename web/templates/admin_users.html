@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Thành viên | Quản trị{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap">
+  {% include "_admin_nav.html" %}
+  <form class="row" style="margin-bottom: 14px;"><input class="grow" type="search" name="q" value="{{ kw }}" placeholder="Tìm tên đăng nhập / tên hiển thị" aria-label="Tìm thành viên"><button class="btn btn-ghost">Tìm</button></form>
+  <div class="card table-wrap">
+    <table class="table">
+      <thead><tr><th>Thành viên</th><th>Vai trò</th><th>Truyện</th><th>Tham gia</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody>
+      {% for u in rows %}
+      <tr>
+        <td><div class="row" style="gap: 8px; flex-wrap: nowrap;">{{ m.avatar(u, "sm") }}<div><a href="/thanh-vien/{{ u.username }}"><b>{{ u.display_name }}</b></a><div class="small muted">@{{ u.username }}</div></div></div></td>
+        <td>
+          <form method="post" action="/quan-tri/thanh-vien/{{ u.id }}" class="row" style="gap: 6px; flex-wrap: nowrap;">{{ m.csrf_field() }}<input type="hidden" name="action" value="role">
+            <select name="role" style="width: auto;" aria-label="Vai trò">{% for r, label in ROLE_LABEL.items() %}<option value="{{ r }}" {{ "selected" if u.role == r }}>{{ label }}</option>{% endfor %}</select>
+            <button class="btn btn-ghost btn-sm">Lưu</button>
+          </form>
+        </td>
+        <td>{{ u.stories }}</td>
+        <td class="small nowrap">{{ u.created_at|fmt_date }}</td>
+        <td>{% if u.is_banned %}<span class="badge danger">Đã khoá</span>{% else %}<span class="badge full">Hoạt động</span>{% endif %}</td>
+        <td class="actions-cell"><form method="post" action="/quan-tri/thanh-vien/{{ u.id }}" data-confirm="Đặt lại mật khẩu ngẫu nhiên cho {{ u.username }}?">{{ m.csrf_field() }}<button class="btn btn-ghost btn-sm" name="action" value="resetpw">Đặt lại mật khẩu</button></form>
+          <form method="post" action="/quan-tri/thanh-vien/{{ u.id }}" data-confirm="{{ 'Mở khoá' if u.is_banned else 'Khoá' }} tài khoản {{ u.username }}?">{{ m.csrf_field() }}<button class="btn btn-sm {{ 'btn-soft' if u.is_banned else 'btn-danger' }}" name="action" value="ban">{{ "Mở khoá" if u.is_banned else "Khoá" }}</button></form></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ m.pagination(page, "/quan-tri/thanh-vien", {"q": kw}) }}
+  <p class="small muted">“Người đăng” được dùng chức năng Nhập truyện Trung &amp; dịch AI. Mọi thành viên đều đăng được truyện sáng tác.</p>
+</div>
+{% endblock %}

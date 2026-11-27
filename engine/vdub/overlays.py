@@ -106,26 +106,122 @@ def detect(proj: Project):
                 best["texts"][txt] += 1
                 best["last"] = t
                 best["hits"] += 1
+                best["sizes"].append(box)
             else:
-                tracks.append({"box": box, "texts": Counter({txt: 1}), "first": t, "last": t, "hits": 1})
+                tracks.append({"box": box, "texts": Counter({txt: 1}), "first": t, "last": t, "hits": 1,
+                               "sizes": [box]})
         progress(STEP, min(90, 1 + t / max(dur, 1) * 89), f"Đang dò chữ trên video... {t:.0f}/{dur:.0f}s, "
                                                          f"thấy {len(tracks)} dòng")
 
     # bỏ chữ chỉ thoáng qua 1 khung (thường là chữ trên đồ vật bị đọc nhầm)
     tracks = [tr for tr in tracks if tr["hits"] >= 2 or dur <= step * 3]
+    tracks = _clean(tracks, step, vw / vh)
     items = []
     for i, tr in enumerate(sorted(tracks, key=lambda tr: (tr["first"], tr["box"][1])), 1):
         x0, y0, x1, y1 = tr["box"]
+        # khung gộp (x,y,w,h) dùng để xóa chữ cũ; cỡ & tâm chữ "thật" lấy trung vị qua các khung hình để đặt chữ Việt
+        s = np.array(tr["sizes"])
+        med = {"th": float(np.median(s[:, 3] - s[:, 1])), "tw": float(np.median(s[:, 2] - s[:, 0])),
+               "cx": float(np.median((s[:, 0] + s[:, 2]) / 2)), "cy": float(np.median((s[:, 1] + s[:, 3]) / 2))}
         items.append({
+            **{k: round(v, 4) for k, v in med.items()},
             "id": i,
-            "start": round(max(0.0, tr["first"] - step / 2), 2),
-            "end": round(min(dur, tr["last"] + step / 2), 2),
+            # chữ có thể đã hiện/còn hiện tới gần một khoảng lấy mẫu trước/sau lần đọc được → xóa dư mỗi đầu
+            "start": round(max(0.0, tr["first"] - step), 2),
+            "end": round(min(dur, tr["last"] + step), 2),
             "x": round(x0, 4), "y": round(y0, 4), "w": round(x1 - x0, 4), "h": round(y1 - y0, 4),
             "zh": tr["texts"].most_common(1)[0][0],
             "vi": "",
         })
     _classify(items)
     return items
+
+
+def _text(tr):
+    return tr["texts"].most_common(1)[0][0]
+
+
+def _contain(small, big):
+    """Tỉ lệ diện tích khung [small] nằm trong khung [big]."""
+    ix = max(0.0, min(small[2], big[2]) - max(small[0], big[0]))
+    iy = max(0.0, min(small[3], big[3]) - max(small[1], big[1]))
+    area = (small[2] - small[0]) * (small[3] - small[1])
+    return ix * iy / area if area > 0 else 0.0
+
+
+def _clean(tracks, step, aspect):
+    """OCR đọc lúc đủ lúc thiếu cùng một dòng chữ → nhiều mảnh chồng nhau, chữ Việt chớp tắt liên tục. Gộp lại."""
+    # chữ dọc / khung cao bất thường (đọc nhầm): bỏ qua, không đụng vào
+    tracks = [tr for tr in tracks if tr["box"][3] - tr["box"][1] <= 0.2]
+
+    # 1) cùng dòng chữ, cùng chỗ, chỉ đứt quãng ngắn (khung hình đọc trượt) → nối liền
+    tracks.sort(key=lambda tr: tr["first"])
+    merged = []
+    for tr in tracks:
+        prev = next((m for m in reversed(merged)
+                     if tr["first"] - m["last"] <= max(3.0, step * 4) and _iou(m["box"], tr["box"]) > 0.4
+                     and _same_text(_text(m), _text(tr))), None)
+        if prev:
+            b, c = prev["box"], tr["box"]
+            prev["box"] = [min(b[0], c[0]), min(b[1], c[1]), max(b[2], c[2]), max(b[3], c[3])]
+            prev["texts"].update(tr["texts"])
+            prev["sizes"] += tr["sizes"]
+            prev["last"] = max(prev["last"], tr["last"])
+            prev["hits"] += tr["hits"]
+        else:
+            merged.append(tr)
+
+    # 2) mảnh đọc thiếu (chữ là một phần của dòng dài hơn, nằm gọn trong khung của dòng đó, cùng lúc) → bỏ
+    def rank(t):  # dòng đầy đủ hơn (chữ dài hơn, đọc được nhiều lần hơn) được giữ
+        return len(_text(t)), t["hits"], -t["first"]
+
+    def covered(a):
+        for b in merged:
+            if b is a or rank(b) <= rank(a):
+                continue
+            overlap = min(a["last"], b["last"]) - max(a["first"], b["first"]) + step
+            dur = a["last"] - a["first"] + step
+            if overlap / dur > 0.6 and _contain(a["box"], b["box"]) > 0.6 and \
+                    (_text(a) in _text(b) or _same_text(_text(a), _text(b))):
+                return True
+        return False
+
+    merged = [tr for tr in merged if not covered(tr)]
+
+    # 3) một dòng bị đọc thành nhiều mảnh nằm cạnh nhau trên cùng hàng, cùng lúc → ghép thành một dòng
+    def th(t):
+        return t["box"][3] - t["box"][1]
+
+    def same_line(a, b):
+        h = max(th(a), th(b))
+        cy_a, cy_b = (a["box"][1] + a["box"][3]) / 2, (b["box"][1] + b["box"][3]) / 2
+        if abs(cy_a - cy_b) > h * 0.5:
+            return False
+        left, right = (a, b) if a["box"][0] <= b["box"][0] else (b, a)
+        gap = (right["box"][0] - left["box"][2]) * aspect  # quy về cùng đơn vị với chiều cao
+        overlap = min(a["last"], b["last"]) - max(a["first"], b["first"]) + step
+        shorter = min(a["last"] - a["first"], b["last"] - b["first"]) + step
+        return gap < h * 1.5 and overlap / shorter > 0.5
+
+    changed = True
+    while changed:
+        changed = False
+        for a in merged:
+            b = next((b for b in merged if b is not a and same_line(a, b)), None)
+            if b:
+                left, right = (a, b) if a["box"][0] <= b["box"][0] else (b, a)
+                text = _text(left) + _text(right)
+                a["box"] = [min(a["box"][0], b["box"][0]), min(a["box"][1], b["box"][1]),
+                            max(a["box"][2], b["box"][2]), max(a["box"][3], b["box"][3])]
+                a["texts"] = Counter({text: a["hits"] + b["hits"]})
+                a["first"], a["last"] = min(a["first"], b["first"]), max(a["last"], b["last"])
+                a["hits"] += b["hits"]
+                # cỡ chữ: giữ các khung của mảnh lớn, tâm ngang lấy theo cả dòng
+                a["sizes"] = [[a["box"][0], s[1], a["box"][2], s[3]] for s in a["sizes"] + b["sizes"]]
+                merged.remove(b)
+                changed = True
+                break
+    return merged
 
 
 def _classify(items):

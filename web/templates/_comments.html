@@ -1,0 +1,36 @@
+{% import "macros.html" as m with context %}
+{% set cid = c.id if c is defined and c else "" %}
+<h2 style="font-size: 1.15rem;">{{ m.icon("message") }} Bình luận <span class="muted small">({{ cpage.total }})</span></h2>
+{% if user %}
+<form class="comment-form" method="post" action="/binh-luan">
+  {{ m.csrf_field() }}
+  <input type="hidden" name="story_id" value="{{ s.id }}">
+  <input type="hidden" name="chapter_id" value="{{ cid }}">
+  <input type="hidden" name="next" value="{{ path }}">
+  <label class="sr-only" for="cmt-body">Nội dung bình luận</label>
+  <textarea id="cmt-body" name="body" maxlength="2000" required minlength="2" placeholder="Cảm nghĩ của bạn về {{ 'chương này' if cid else 'truyện' }}… (lịch sự, không tiết lộ nội dung)"></textarea>
+  <div class="row" style="justify-content: flex-end; margin-top: 8px;"><button class="btn btn-sm" type="submit">Gửi bình luận</button></div>
+</form>
+{% else %}
+<p class="muted"><a style="color: var(--primary); font-weight: 600;" href="/dang-nhap?next={{ path|urlq }}">Đăng nhập</a> để bình luận.</p>
+{% endif %}
+<div class="comments">
+  {% for cm in comments %}
+  <div class="comment" id="bl-{{ cm.id }}">
+    {{ m.avatar(cm) }}
+    <div style="min-width: 0;">
+      <div class="who"><a href="/thanh-vien/{{ cm.username }}">{{ cm.display_name }}</a>
+        {% if cm.user_id == s.owner_id %}<span class="badge hot">Tác giả</span>{% elif cm.role == "admin" %}<span class="badge ai">Quản trị</span>{% endif %}
+        <time datetime="{{ cm.created_at }}" title="{{ cm.created_at|fmt_time }}">{{ cm.created_at|time_ago }}</time>
+        {% if user and (user.role == "admin" or user.id == cm.user_id or user.id == s.owner_id) %}
+        <form method="post" action="/binh-luan/{{ cm.id }}/xoa" data-confirm="Xoá bình luận này?">{{ m.csrf_field() }}<input type="hidden" name="next" value="{{ path }}"><button class="link-btn" type="submit">Xoá</button></form>
+        {% endif %}
+      </div>
+      <div class="body">{{ cm.body }}</div>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted small" style="margin-top: 12px;">Chưa có bình luận nào.</p>
+  {% endfor %}
+</div>
+{{ m.pagination(cpage, path, {}, "bl", "#binh-luan") }}

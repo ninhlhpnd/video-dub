@@ -110,6 +110,63 @@ class _SettingsPageState extends State<SettingsPage> {
                     )),
                 _field('gemini_model', 'Model Gemini', def: 'gemini-flash-latest'),
               ]),
+              _section('Viết truyện', [
+                DropdownButtonFormField<String>(
+                  initialValue: const ['claude', 'claude_cli'].contains(c('story_writer', 'gemini').text)
+                      ? c('story_writer').text
+                      : 'gemini',
+                  decoration: const InputDecoration(labelText: 'Người viết'),
+                  items: const [
+                    DropdownMenuItem(value: 'gemini', child: Text('Gemini Flash (miễn phí, dùng Gemini key ở trên)')),
+                    DropdownMenuItem(value: 'claude', child: Text('Claude API (trả theo token, văn hay hơn)')),
+                    DropdownMenuItem(
+                        value: 'claude_cli', child: Text('Claude Code trên máy (dùng gói Claude Pro/Max đang đăng nhập)')),
+                  ],
+                  onChanged: (v) => c('story_writer').text = v!,
+                ),
+                _hint('Claude API: lấy key tại platform.claude.com → API keys, cần có credit (Billing).\n'
+                    'Claude Code: cài Claude Code, mở cửa sổ lệnh gõ "claude" đăng nhập một lần; app gọi "claude -p" '
+                    'ở chế độ chỉ viết chữ, tính vào hạn mức của gói (hết hạn mức thì chờ rồi bấm viết tiếp).'),
+                _field('claude_api_key', 'Claude API key', obscure: !showKey),
+                _field('claude_cli_path', 'Đường dẫn claude.exe (để trống = tự tìm)'),
+                DropdownButtonFormField<String>(
+                  initialValue: c('claude_model', 'claude-opus-5-5').text == 'claude-sonnet-5-5'
+                      ? 'claude-sonnet-5-5'
+                      : 'claude-opus-5-5',
+                  decoration: const InputDecoration(labelText: 'Model'),
+                  items: const [
+                    DropdownMenuItem(value: 'claude-opus-5-5', child: Text('Claude Opus 5.5 (hay nhất)')),
+                    DropdownMenuItem(value: 'claude-sonnet-5-5', child: Text('Claude Sonnet 5.5 (rẻ bằng nửa)')),
+                  ],
+                  onChanged: (v) => c('claude_model').text = v!,
+                ),
+              ]),
+              _section('Web đọc truyện', [
+                _hint('Địa chỉ trang web đọc truyện (thư mục web/ trong bộ cài), VD http://localhost:8000 hoặc tên miền của '
+                    'bạn. API key lấy ở trang Hồ sơ trên web sau khi đăng nhập.'),
+                _field('web_url', 'Địa chỉ web'),
+                _field('web_api_key', 'API key', obscure: !showKey),
+                _field('web_author', 'Tên tác giả hiển thị (để trống = tên tài khoản)'),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.wifi_tethering),
+                    label: const Text('Kiểm tra kết nối'),
+                    onPressed: () async {
+                      for (final e in ctrls.entries) {
+                        settings.data[e.key] = e.value.text.trim();
+                      }
+                      await settings.save();
+                      final ev = await Engine.once(['web_check'], engineOverride: settings.get('engine_dir'));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ev.type == 'done'
+                              ? 'Kết nối được: tài khoản ${ev.data['username']} (${ev.data['role']})'
+                              : 'Lỗi: ${ev.msg}')));
+                    },
+                  ),
+                ),
+              ]),
               _section('Nhận dạng giọng nói (Whisper)', [
                 DropdownButtonFormField<String>(
                   initialValue: whisperModels.containsKey(whisper) ? whisper : 'large-v3-turbo',

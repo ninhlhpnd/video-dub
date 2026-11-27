@@ -25,6 +25,22 @@ Mở app: `app\build\windows\x64\runner\Release\video_dub.exe`
 2. (Tùy chọn) **YouTube**: OAuth client "Desktop app" trên Google Cloud, bật YouTube Data API v3, chọn file `client_secret.json`. Chưa qua audit của Google thì video bị giữ ở chế độ riêng tư.
 3. (Tùy chọn) **Facebook**: Cài đặt → Kết nối Fanpage, làm theo hướng dẫn trong hộp thoại (App ID, App Secret, User Token với quyền `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`). App tự đổi sang Page Token không hết hạn.
 
+## Truyện dài nhiều chương → video từng tập
+Màn hình chính → **Truyện dài** → **Bộ truyện mới**: chọn thể loại, ý tưởng, số chương (tới vài nghìn), độ dài mỗi chương (mặc định 3000 ký tự ≈ 1 trang A4) và độ dài mỗi tập video (15-20 phút).
+
+1. **Lập sổ tay**: AI thiết kế thế giới, quy luật/hệ thống sức mạnh, 8-14 nhân vật (kèm ngoại hình để vẽ), địa danh, giọng văn, kết cục và chia thành các quyển (~40 chương/quyển). Sửa được hết trước khi viết.
+2. **Viết thêm 1/10/30/100 chương**: mỗi chương AI nhận sổ tay + tóm tắt các quyển đã xong + dàn ý chi tiết quyển đang viết (lập khi bắt đầu quyển, dựa trên những gì đã thật sự viết) + trạng thái hiện tại của nhân vật + các nút thắt còn mở + tóm tắt 12 chương gần nhất + nguyên văn 2 chương liền trước. Sau mỗi chương AI cập nhật trạng thái/nút thắt, nên truyện nghìn chương vẫn liền mạch mà mỗi lần gọi chỉ ~25 nghìn token. Dừng giữa chừng không mất gì, bấm viết tiếp là chạy tiếp.
+3. Sửa tay một chương thì chương sau tự bám theo bản đã sửa. **Viết lại từ chương N** xóa chương N trở đi và trả trí nhớ AI về đúng lúc sau chương N-1.
+4. **Tạo tập video**: lấy các chương tiếp theo đủ ~17 phút thành một project Truyện kể (đầu tập có lời nhắc tập trước, cuối tập hé lộ tập sau; nhân vật và phong cách tranh giữ nguyên cả bộ; tiêu đề YouTube dạng "Tên truyện - Tập N: …", mô tả có link đọc truyện chữ). Sau đó chạy tiếp các bước chia cảnh → vẽ ảnh → đọc → ghép video → đăng như truyện ngắn.
+5. **Đăng lên web đọc truyện** (thư mục `web/`): đăng/cập nhật các chương mới hoặc đã sửa, có thể bật tự đăng sau mỗi lượt viết.
+
+Người viết (Cài đặt → Viết truyện): Gemini Flash (miễn phí, giới hạn lượt/ngày), Claude API (trả theo token; khối sổ tay và dàn ý quyển được lưu đệm prompt nên các chương sau rẻ hơn), hoặc **Claude Code** đã đăng nhập trên máy (`claude -p`, chế độ không công cụ, tính vào hạn mức gói Pro/Max).
+
+Dữ liệu: `<thư mục project>\_series\<id>\series.json` và `chapters\0001.json`… (mỗi chương lưu kèm bản chụp trí nhớ AI).
+
+## Web đọc truyện
+Thư mục `web/`: trang đọc truyện (FastAPI + SQLite) cho độc giả đọc, người dùng tự đăng truyện, ủng hộ (donate) tác giả qua QR ngân hàng, và nhập truyện Trung từ link/file .txt để AI tự dịch và đăng từng chương. Xem `web/README.md`.
+
 ## Cấu trúc
 | Thư mục | Nội dung |
 |---|---|
@@ -33,6 +49,7 @@ Mở app: `app\build\windows\x64\runner\Release\video_dub.exe`
 | `engine/.venv_tts` | Môi trường giọng VieNeu-TTS (tách riêng), gọi qua `vieneu_worker.py` |
 | `tools/` | ffmpeg, mô hình, token YouTube, file nghe thử (không đưa lên git) |
 | `app/` | Giao diện Flutter Windows |
+| `web/` | Web đọc truyện (Python FastAPI + SQLite), chạy riêng |
 
 Project lưu ở `%USERPROFILE%\Videos\VideoDub\` (đổi được trong Cài đặt). Cài đặt và các key lưu ở `%APPDATA%\VideoDub\settings.json` (không nằm trong repo).
 

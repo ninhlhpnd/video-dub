@@ -7,12 +7,16 @@ import 'package:path/path.dart' as p;
 const pipelines = {
   'dub': ['transcribe', 'speakers', 'translate', 'overlays', 'separate', 'tts', 'render'],
   'review': ['script', 'overlays', 'separate', 'tts', 'render'],
+  'story': ['outline', 'write', 'polish', 'scenes', 'images', 'voice', 'compose'],
 };
 
 bool wantsSeparate(Map<String, dynamic> o) =>
     o['mode'] == 'review' ? o['review_remove_voice'] == true : o['keep_background'] != false;
 
 List<String> stepsFor(Map<String, dynamic> o) {
+  if (o['mode'] == 'story') {
+    return pipelines['story']!.where((s) => s != 'polish' || o['story_polish'] != false).toList();
+  }
   final mode = o['mode'] == 'review' ? 'review' : 'dub';
   return pipelines[mode]!
       .where((s) => s != 'separate' || wantsSeparate(o))
@@ -45,6 +49,17 @@ const stepNames = {
   'separate': 'Xóa giọng gốc',
   'tts': 'Lồng tiếng',
   'render': 'Xuất video',
+  'outline': 'Lập dàn ý',
+  'write': 'Viết truyện',
+  'polish': 'Biên tập lại',
+  'scenes': 'Chia cảnh & tiêu đề',
+  'images': 'Vẽ ảnh',
+  'voice': 'Đọc truyện',
+  'compose': 'Ghép video',
+  'series_plan': 'Lập sổ tay bộ truyện',
+  'series_write': 'Viết chương',
+  'series_episode': 'Tạo tập video',
+  'series_publish': 'Đăng lên web',
   'youtube': 'YouTube',
   'facebook': 'Facebook',
 };
@@ -150,6 +165,7 @@ class Project {
   Map<String, dynamic> get steps => (meta['steps'] as Map?)?.cast<String, dynamic>() ?? {};
   Map<String, dynamic> get options => (meta['options'] as Map?)?.cast<String, dynamic>() ?? {};
   bool done(String step) => steps[step] == 'done';
+  bool get isStory => options['mode'] == 'story';
   bool get isReview => options['mode'] == 'review';
   List<String> get activeSteps => stepsFor(options);
   Map<String, dynamic> get speakers => (meta['speakers'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -168,6 +184,14 @@ class Project {
   void setOption(String key, dynamic value) {
     reload();
     (meta['options'] as Map)[key] = value;
+    _write();
+  }
+
+  /// Bỏ đánh dấu xong của các bước (người dùng sửa nội dung nên phải chạy lại).
+  void clearSteps(List<String> names) {
+    if (!names.any(done)) return;
+    reload();
+    names.forEach((meta['steps'] as Map).remove);
     _write();
   }
 

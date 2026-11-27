@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Ủng hộ | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 1000px;">
+  {% if scope != "admin" %}
+  <h1 class="page-title">{{ m.icon("gift") }} Ủng hộ nhận được</h1>
+  <nav class="subnav"><a href="/dang-truyen">Truyện</a><a class="on" href="/dang-truyen/ung-ho">Ủng hộ</a><a href="/tai-khoan?tab=ung-ho">Tài khoản nhận tiền</a></nav>
+  {% else %}
+  {% include "_admin_nav.html" %}
+  <h2 style="font-size: 1.2rem;">Ủng hộ cho trang</h2>
+  {% endif %}
+  <p class="muted">Đã xác nhận: <b style="color: var(--primary);">{{ total|money }}</b>. Kiểm tra tài khoản ngân hàng/MoMo rồi bấm “Xác nhận” để tên người ủng hộ hiện trên bảng vinh danh.</p>
+  {% if rows %}
+  <div class="card table-wrap">
+    <table class="table">
+      <thead><tr><th>Thời gian</th><th>Người ủng hộ</th><th>Số tiền</th><th>Truyện</th><th>Lời nhắn</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody>
+      {% for d in rows %}
+      <tr>
+        <td class="nowrap small">{{ d.created_at|fmt_time }}</td>
+        <td><b>{{ d.donor_name }}</b>{% if d.source == "webhook" %} <span class="badge ai">Tự động</span>{% endif %}</td>
+        <td class="nowrap"><b>{{ d.amount|money }}</b></td>
+        <td>{% if d.slug %}<a href="/truyen/{{ d.slug }}">{{ d.story_title|truncate(40) }}</a>{% else %}<span class="muted">Trang</span>{% endif %}</td>
+        <td class="small">{{ d.message }}</td>
+        <td>{% if d.status == "pending" %}<span class="badge hot">Chờ</span>{% elif d.status == "confirmed" %}<span class="badge full">Đã xác nhận</span>{% else %}<span class="badge danger">Từ chối</span>{% endif %}</td>
+        <td class="actions-cell">
+          <form method="post" action="/dang-truyen/ung-ho/{{ d.id }}">{{ m.csrf_field() }}<input type="hidden" name="back" value="{{ scope }}">
+            {% if d.status != "confirmed" %}<button class="btn btn-soft btn-sm" name="action" value="confirm">Xác nhận</button>{% endif %}
+            {% if d.status == "pending" %}<button class="btn btn-ghost btn-sm" name="action" value="reject">Từ chối</button>{% endif %}
+            <button class="btn btn-ghost btn-sm" name="action" value="delete" data-confirm="Xoá khoản này?">Xoá</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="card empty">{{ m.icon("gift") }}<p>Chưa có khoản ủng hộ nào.</p></div>{% endif %}
+</div>
+{% endblock %}

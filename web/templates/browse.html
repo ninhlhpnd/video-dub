@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}{{ title }}{% if page.page > 1 %} – trang {{ page.page }}{% endif %} | {{ settings.site_name }}{% endblock %}
+{% block description %}{{ title }}: {{ total }} truyện, cập nhật liên tục, đọc miễn phí tại {{ settings.site_name }}.{% endblock %}
+{% block content %}
+{% macro flink(key, value, label) -%}
+{% set params = dict(qs) %}{% set _ = params.pop("trang", None) %}
+{% if value %}{% set _ = params.update({key: value}) %}{% else %}{% set _ = params.pop(key, None) %}{% endif %}
+{% set cur = qs.get(key, "") %}
+<a class="chip {{ 'active' if cur == value }}" href="{{ list_path }}{% if params %}?{% for k, v in params.items() %}{{ k }}={{ v|urlq }}{{ '&' if not loop.last }}{% endfor %}{% endif %}">{{ label }}</a>
+{%- endmacro %}
+<div class="wrap">
+  <h1 class="page-title">{{ title }}</h1>
+  <p class="page-sub">{{ total|num }} truyện{% if genre %} thể loại {{ genre.name }}{% endif %}</p>
+
+  <div class="card filters">
+    {% if list_path == "/danh-sach" %}
+    <form action="/danh-sach" class="row" role="search">
+      {% for k, v in qs.items() if k not in ("q", "trang") %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <input class="grow" type="search" name="q" value="{{ q }}" placeholder="Tên truyện hoặc tác giả (gõ không dấu cũng được)" aria-label="Từ khoá">
+      <button class="btn" type="submit">{{ m.icon("search") }} Tìm</button>
+    </form>
+    <div class="filter-row"><b>Thể loại</b>
+      <div class="chips scroll">
+        {{ flink("the-loai", "", "Tất cả") }}
+        {% for g in genres %}{{ flink("the-loai", g.slug, g.name) }}{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="filter-row"><b>Tình trạng</b>
+      <div class="chips scroll">{{ flink("trang-thai", "", "Tất cả") }}{{ flink("trang-thai", "dang-ra", "Đang ra") }}{{ flink("trang-thai", "hoan-thanh", "Hoàn thành") }}</div>
+    </div>
+    <div class="filter-row"><b>Nguồn</b>
+      <div class="chips scroll">{{ flink("nguon", "", "Tất cả") }}{{ flink("nguon", "sang-tac", "Sáng tác") }}{{ flink("nguon", "dich", "Truyện dịch") }}{{ flink("nguon", "ai", "AI viết") }}</div>
+    </div>
+    <div class="filter-row"><b>Sắp xếp</b>
+      <div class="chips scroll">{% for key, (label, _) in sorts.items() %}{{ flink("sap-xep", key, label) }}{% endfor %}</div>
+    </div>
+  </div>
+
+  {% if stories %}
+  <div class="list-rows">
+    {% for s in stories %}
+    <article class="card srow">
+      <a href="{{ story_path(s) }}" tabindex="-1">{% call m.cover(s) %}{% if s.status == "completed" %}<span class="badge full tag">Full</span>{% endif %}{% endcall %}</a>
+      <div style="min-width: 0;">
+        <h3 class="clamp-2"><a href="{{ story_path(s) }}">{{ s.title }}</a></h3>
+        <div class="meta">
+          <span>{{ m.icon("user") }} {{ s.author_name or "Ẩn danh" }}</span>
+          <span>{{ m.icon("list") }} {{ s.chapter_count|num }} chương</span>
+          <span>{{ m.icon("eye") }} {{ s.views|num }}</span>
+          {% if s.rating %}<span>{{ m.icon("star") }} {{ s.rating }}</span>{% endif %}
+        </div>
+        <p class="clamp-2">{{ s.description|excerpt(200) }}</p>
+        <div class="chips" style="margin-top: 8px; gap: 5px;">
+          <span class="badge {{ 'full' if s.status == 'completed' else '' }}">{{ STATUS_LABEL[s.status] }}</span>
+          <span class="badge {{ 'ai' if s.origin == 'ai' else '' }}">{{ ORIGIN_LABEL[s.origin] }}</span>
+          {% for g in s.genres[:2] %}<span class="badge">{{ g.name }}</span>{% endfor %}
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {{ m.pagination(page, list_path, qs) }}
+  {% else %}
+  <div class="card empty">{{ m.icon("search") }}<p>Không tìm thấy truyện phù hợp. Thử bỏ bớt bộ lọc hoặc từ khoá khác.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

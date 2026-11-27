@@ -5,8 +5,15 @@ Ví dụ:
   python dub.py run --project D:/VideoDub/a_2026... --settings settings.json
   python dub.py tts --project ...          (chạy lại từ một bước sau khi sửa phụ đề)
   python dub.py youtube --video out.mp4 --title "..." --publish-at 2026-11-01T19:00
+Truyện dài (--project là thư mục bộ truyện):
+  python dub.py series_new --workspace D:/VideoDub --options '{"genre": "...", "chapters": 1000}'
+  python dub.py series_plan --project <bộ truyện>         (sổ tay + các quyển)
+  python dub.py series_write --project <bộ truyện> --count 20
+  python dub.py series_episode --project <bộ truyện> --workspace D:/VideoDub --minutes 17
+  python dub.py series_publish --project <bộ truyện>      (đăng chương lên web đọc truyện)
 """
 import argparse
+import json
 import subprocess
 import sys
 import traceback
@@ -17,6 +24,15 @@ from vdub import common  # noqa: E402  (đặt biến môi trường HF_HOME/TOR
 from vdub.common import PIPELINES, Project, emit, load_settings, steps_for  # noqa: E402
 
 ALL_STEPS = list(dict.fromkeys(s for steps in PIPELINES.values() for s in steps))
+SERIES_CMDS = ["series_new", "series_plan", "series_write", "series_rewind", "series_episode", "series_publish",
+               "web_check"]
+
+
+def step_runner(name):
+    if name in PIPELINES["story"]:
+        from vdub import story
+        return getattr(story, name)
+    return step_module(name).run
 
 
 def step_module(name):
@@ -37,8 +53,13 @@ def plan(proj, start):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="", help="link hoặc đoạn chữ chia sẻ chứa link (lệnh download)")
-    ap.add_argument("cmd", choices=["new", "download", "music", "run", "plan", "info", "cover", "preview", "caption", "fb_pages",
-                                    "youtube", "facebook", *ALL_STEPS])
+    ap.add_argument("cmd", choices=["new", "new_story", "download", "music", "run", "plan", "info", "cover", "preview", "caption", "fb_pages",
+                                    "youtube", "facebook", *SERIES_CMDS, *ALL_STEPS])
+    ap.add_argument("--count", type=int, default=10, help="số chương viết thêm (series_write)")
+    ap.add_argument("--minutes", type=float, default=0, help="độ dài tập video (series_episode)")
+    ap.add_argument("--n", type=int, default=0, help="chương bắt đầu viết lại (series_rewind)")
+    ap.add_argument("--options", default="{}", help="tùy chọn dạng JSON (lệnh new_story)")
+    ap.add_argument("--until", default="", choices=["", *ALL_STEPS], help="chạy tới hết bước này rồi dừng")
     ap.add_argument("--voice", default="")
     ap.add_argument("--app-id", default="")
     ap.add_argument("--app-secret", default="")
@@ -87,6 +108,33 @@ def main():
         emit("done", project=str(p.dir), meta=p.meta)
         return
 
+    if a.cmd == "new_story":
+        from vdub import story
+        emit("done", project=str(story.create(a.workspace, json.loads(a.options)).dir))
+        return
+
+    if a.cmd in SERIES_CMDS:
+        from vdub import series
+        if a.cmd == "series_new":
+            emit("done", project=str(series.Series.create(a.workspace, json.loads(a.options)).dir))
+        elif a.cmd == "series_plan":
+            series.plan(a.project, settings)
+            emit("done", project=a.project)
+        elif a.cmd == "series_write":
+            series.write(a.project, settings, a.count)
+            emit("done", project=a.project)
+        elif a.cmd == "series_rewind":
+            emit("done", written=series.rewind(a.project, a.n))
+        elif a.cmd == "series_episode":
+            proj, k, first, last = series.episode(a.project, a.workspace, settings, a.minutes)
+            emit("done", project=str(proj.dir), episode=k, first=first, last=last)
+        elif a.cmd == "series_publish":
+            emit("done", url=series.publish(a.project, settings))
+        elif a.cmd == "web_check":
+            with series._api(settings) as c:
+                emit("done", **series._check(c.get("/api/me")))
+        return
+
     if a.cmd == "fb_pages":
         from vdub import upload
         emit("done", pages=upload.facebook_pages(a.app_id, a.app_secret, a.user_token, settings["graph_version"]))
@@ -121,6 +169,8 @@ def main():
         # Mỗi bước chạy ở tiến trình riêng: faster-whisper (ctranslate2) và torch/demucs mang 2 bản cuDNN khác nhau,
         # nạp chung một tiến trình sẽ crash; tách ra cũng giải phóng hết VRAM giữa các bước.
         steps = plan(proj, a.start)
+        if a.until in steps:
+            steps = steps[:steps.index(a.until) + 1]
         emit("plan", steps=steps)
         mode = proj.opt.get("mode", "dub")
         i = 0
@@ -159,7 +209,7 @@ def main():
     if a.cmd == "translate":
         step_module(a.cmd).run(proj, settings, force=a.force)
     else:
-        step_module(a.cmd).run(proj, settings)
+        step_runner(a.cmd)(proj, settings)
     emit("done", project=str(proj.dir))
 
 

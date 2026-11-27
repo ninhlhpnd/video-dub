@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}{{ "Sửa" if c else "Viết" }} chương {{ n }} – {{ s.title }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+{% set f = form if form is defined and form else (c if c else {}) %}
+<div class="wrap editor" style="max-width: 900px;">
+  <div class="row" style="margin: 22px 0 4px;"><a class="small muted" href="/dang-truyen/{{ s.id }}">← {{ s.title }}</a></div>
+  <h1 class="page-title" style="margin-top: 4px;">{{ "Sửa" if c else "Viết" }} chương {{ n }}</h1>
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+  <form method="post" action="/dang-truyen/{{ s.id }}/chuong" class="card card-pad" data-editor>
+    {{ m.csrf_field() }}
+    <input type="hidden" name="old_n" value="{{ c.n if c else (f.old_n or 0) }}">
+    <div class="row" style="align-items: flex-end;">
+      <div class="field" style="width: 120px;"><label for="n">Số chương</label><input id="n" type="number" name="n" value="{{ f.n or n }}" min="1" max="100000" required></div>
+      <div class="field grow"><label for="t">Tên chương</label><input id="t" type="text" name="title" value="{{ f.title or '' }}" maxlength="200" placeholder="Ví dụ: Thiếu niên rời núi"></div>
+    </div>
+    <div class="field">
+      <label for="content">Nội dung</label>
+      <textarea id="content" class="content" name="content" required placeholder="Dán hoặc gõ nội dung chương. Các đoạn văn cách nhau bằng một dòng trống.">{{ f.content or '' }}</textarea>
+      <div class="counter" data-counter>0 chữ</div>
+    </div>
+    <div class="field">
+      <label>Đăng</label>
+      <div class="row">
+        <label class="check"><input type="radio" name="mode" value="publish" {{ "checked" if not c or (c.is_published and c.publish_at <= (now or 0)) }}> Đăng ngay</label>
+        <label class="check"><input type="radio" name="mode" value="draft" {{ "checked" if c and not c.is_published }}> Lưu nháp</label>
+        <label class="check"><input type="radio" name="mode" value="schedule" {{ "checked" if c and c.is_published and c.publish_at > (now or 0) }}> Hẹn giờ</label>
+        <input type="datetime-local" name="publish_at" value="{{ c.publish_at|dt_local if c and c.publish_at > (now or 0) else '' }}" style="width: auto;" aria-label="Thời gian hẹn đăng (giờ Việt Nam)">
+      </div>
+    </div>
+    <div class="sticky-bar row">
+      <button class="btn" type="submit">{{ m.icon("check") }} Lưu</button>
+      {% if not c %}<button class="btn btn-ghost" type="submit" name="next" value="new">Lưu &amp; viết chương sau</button>{% endif %}
+      <a class="btn btn-ghost" href="/dang-truyen/{{ s.id }}">Huỷ</a>
+    </div>
+  </form>
+  {% if c %}
+  <form method="post" action="/dang-truyen/{{ s.id }}/chuong/{{ c.n }}/xoa" style="margin-top: 14px;" data-confirm="Xoá vĩnh viễn chương {{ c.n }}?">
+    {{ m.csrf_field() }}<button class="btn btn-danger btn-sm" type="submit">{{ m.icon("trash") }} Xoá chương này</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

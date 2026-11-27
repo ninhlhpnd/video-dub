@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Truyện mới | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 860px;">
+  <h1 class="page-title">Tạo truyện mới</h1>
+  <p class="page-sub">Truyện chỉ hiện ra trang khi có ít nhất một chương được đăng.</p>
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+  <form class="card card-pad" method="post" action="/dang-truyen/moi" enctype="multipart/form-data">
+    {{ m.csrf_field() }}
+    {% include "_story_fields.html" %}
+    <button class="btn btn-lg" type="submit">Tạo truyện</button>
+    <a class="btn btn-ghost btn-lg" href="/dang-truyen">Huỷ</a>
+  </form>
+</div>
+{% endblock %}

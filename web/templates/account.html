@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Tài khoản | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 860px;">
+  <div class="profile-head">
+    {{ m.avatar(me, "lg") }}
+    <div>
+      <h1 style="margin: 0; font-size: 1.5rem;">{{ me.display_name }}</h1>
+      <div class="muted">@{{ me.username }} · {{ ROLE_LABEL[me.role] }} · tham gia {{ me.created_at|fmt_date }}</div>
+      <a class="small" style="color: var(--primary);" href="/thanh-vien/{{ me.username }}">Xem trang cá nhân →</a>
+    </div>
+  </div>
+  <nav class="tabs-line">
+    <a class="{{ 'on' if tab == 'ho-so' }}" href="/tai-khoan">Hồ sơ</a>
+    <a class="{{ 'on' if tab == 'ung-ho' }}" href="/tai-khoan?tab=ung-ho">Nhận ủng hộ</a>
+    <a class="{{ 'on' if tab == 'api' }}" href="/tai-khoan?tab=api">API cho app</a>
+    <a class="{{ 'on' if tab == 'bao-mat' }}" href="/tai-khoan?tab=bao-mat">Mật khẩu</a>
+  </nav>
+
+  {% if tab == "ung-ho" %}
+  <form class="card card-pad" method="post" action="/tai-khoan">
+    {{ m.csrf_field() }}<input type="hidden" name="action" value="donate">
+    <h2 style="font-size: 1.1rem;">Thông tin nhận ủng hộ</h2>
+    <p class="muted small">Hiện trong nút “Ủng hộ” ở truyện bạn đăng. Bạn đọc quét mã VietQR để chuyển thẳng vào tài khoản của bạn, trang không giữ tiền.</p>
+    <div class="grid-2">
+      <div class="field"><label for="bank">Ngân hàng</label>
+        <select id="bank" name="bank_bin"><option value="">– Chọn ngân hàng –</option>
+          {% for b in BANKS %}<option value="{{ b[0] }}" {{ "selected" if me.bank_bin == b[0] }}>{{ b[1] }} – {{ b[2] }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="acc">Số tài khoản</label><input id="acc" type="text" name="bank_account" value="{{ me.bank_account }}" inputmode="numeric" maxlength="30"></div>
+    </div>
+    <div class="field"><label for="holder">Tên chủ tài khoản</label><input id="holder" type="text" name="bank_holder" value="{{ me.bank_holder }}" placeholder="NGUYEN VAN A" maxlength="60"><div class="hint">Viết hoa không dấu, đúng như trên ngân hàng.</div></div>
+    <div class="grid-2">
+      <div class="field"><label for="momo">Số điện thoại MoMo</label><input id="momo" type="tel" name="momo" value="{{ me.momo }}" maxlength="12"></div>
+      <div class="field"><label for="pp">Link PayPal</label><input id="pp" type="url" name="paypal" value="{{ me.paypal }}" placeholder="https://paypal.me/..."></div>
+    </div>
+    <div class="field"><label for="kofi">Link Ko-fi</label><input id="kofi" type="url" name="kofi" value="{{ me.kofi }}" placeholder="https://ko-fi.com/..."></div>
+    {% if me.bank_bin and me.bank_account %}
+    <div class="field"><label>Xem trước mã QR</label><div class="qr-box" style="max-width: 280px;"><img src="{{ vietqr(me.bank_bin, me.bank_account, 20000, 'UH 0 ' ~ me.username, me.bank_holder) }}" alt="Mã QR xem trước" width="280" height="320"></div></div>
+    {% endif %}
+    <button class="btn" type="submit">Lưu</button>
+    <a class="btn btn-ghost" href="/dang-truyen/ung-ho">Xem các khoản ủng hộ</a>
+  </form>
+
+  {% elif tab == "api" %}
+  <section class="card card-pad">
+    <h2 style="font-size: 1.1rem;">{{ m.icon("key") }} API key cho app Video Dub</h2>
+    <p class="muted small">Dán key này vào Cài đặt của app trên máy tính để app tự đăng truyện AI lên trang. Giữ bí mật như mật khẩu.</p>
+    <div class="apikey" id="apikey">{{ me.api_key }}</div>
+    <div class="row" style="margin-top: 12px;">
+      <button class="btn btn-ghost btn-sm" type="button" data-copy="{{ me.api_key }}">Chép key</button>
+      <form method="post" action="/tai-khoan" data-confirm="Tạo key mới? App đang dùng key cũ sẽ phải nhập lại.">{{ m.csrf_field() }}<input type="hidden" name="action" value="apikey"><button class="btn btn-soft btn-sm" type="submit">Tạo key mới</button></form>
+    </div>
+    <h3 style="font-size: 1rem; margin-top: 22px;">Thông tin kết nối</h3>
+    <div class="pay-line"><span>Địa chỉ trang</span><b>{{ base }}</b></div>
+    <div class="pay-line"><span>Kiểm tra key</span><b><code>GET {{ base }}/api/me</code></b></div>
+    <p class="small muted" style="margin-top: 10px;">Gửi kèm header <code>X-Api-Key</code>. Tài liệu đầy đủ trong file <code>web/API.md</code>.</p>
+  </section>
+
+  {% elif tab == "bao-mat" %}
+  <form class="card card-pad" method="post" action="/tai-khoan" style="max-width: 480px;">
+    {{ m.csrf_field() }}<input type="hidden" name="action" value="password">
+    <h2 style="font-size: 1.1rem;">Đổi mật khẩu</h2>
+    <div class="field"><label for="o">Mật khẩu hiện tại</label><input id="o" type="password" name="old" required autocomplete="current-password"></div>
+    <div class="field"><label for="n1">Mật khẩu mới</label><input id="n1" type="password" name="new" minlength="6" required autocomplete="new-password"></div>
+    <div class="field"><label for="n2">Nhập lại</label><input id="n2" type="password" name="new2" minlength="6" required autocomplete="new-password"></div>
+    <button class="btn" type="submit">Đổi mật khẩu</button>
+  </form>
+
+  {% else %}
+  <form class="card card-pad" method="post" action="/tai-khoan" enctype="multipart/form-data">
+    {{ m.csrf_field() }}<input type="hidden" name="action" value="profile">
+    <div class="field"><label for="dn">Tên hiển thị</label><input id="dn" type="text" name="display_name" value="{{ me.display_name }}" maxlength="50"></div>
+    <div class="field"><label for="em">Email</label><input id="em" type="email" name="email" value="{{ me.email or '' }}"></div>
+    <div class="field"><label for="bio">Giới thiệu</label><textarea id="bio" name="bio" maxlength="500" style="min-height: 90px;">{{ me.bio }}</textarea></div>
+    <div class="field"><label for="av">Ảnh đại diện</label><input id="av" type="file" name="avatar" accept="image/*"><div class="hint">Không bắt buộc. Ảnh vuông sẽ đẹp nhất.</div></div>
+    <button class="btn" type="submit">Lưu hồ sơ</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

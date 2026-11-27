@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}{{ settings.site_name }} – {{ settings.site_tagline }}{% endblock %}
+{% block content %}
+<div class="wrap">
+  {% if featured %}
+  <section class="hero" aria-label="Truyện nổi bật">
+    <div class="slides" id="slides">
+      {% for s in featured %}
+      <article class="slide" style="--h: {{ (s.id * 47) % 360 }}">
+        {% if s.cover %}<div class="slide-bg" style="background-image: url('/media/covers/{{ s.cover }}')"></div>{% else %}<div class="slide-bg ph"></div>{% endif %}
+        <div class="slide-in">
+          <a href="{{ story_path(s) }}" tabindex="-1">{{ m.cover(s) }}</a>
+          <div class="slide-txt">
+            <div class="kicker">{{ m.icon("fire") }} Nổi bật</div>
+            <h2 class="clamp-2"><a href="{{ story_path(s) }}">{{ s.title }}</a></h2>
+            <div class="slide-meta">
+              <span>{{ m.icon("user") }} {{ s.author_name or "Ẩn danh" }}</span>
+              <span>{{ m.icon("list") }} {{ s.chapter_count|num }} chương</span>
+              <span>{{ m.icon("eye") }} {{ s.views|num }}</span>
+            </div>
+            <p class="clamp-3 only-desktop" style="margin-top: .8em;">{{ s.description|excerpt(260) }}</p>
+            <div class="chips">{% for g in s.genres[:3] %}<span class="chip">{{ g.name }}</span>{% endfor %}</div>
+            <a class="btn" href="{{ story_path(s) }}">{{ m.icon("book-open") }} Đọc ngay</a>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% if featured|length > 1 %}<div class="dots" id="dots">{% for s in featured %}<button type="button" aria-label="Truyện nổi bật {{ loop.index }}" class="{{ 'on' if loop.first }}"></button>{% endfor %}</div>{% endif %}
+  </section>
+  {% endif %}
+
+  <section class="section">
+    <div class="chips scroll" aria-label="Thể loại">
+      {% for g in genres if g.cnt %}<a class="chip" href="/the-loai/{{ g.slug }}">{{ g.name }} <small>{{ g.cnt }}</small></a>{% endfor %}
+      {% for g in genres if not g.cnt %}<a class="chip" href="/the-loai/{{ g.slug }}">{{ g.name }}</a>{% endfor %}
+    </div>
+  </section>
+
+  <div class="layout-side">
+    <div>
+      <section class="section" style="margin-top: 0;">
+        <div class="section-head"><h2>{{ m.icon("clock") }} Mới cập nhật</h2><a class="more" href="/danh-sach?sap-xep=moi">Xem tất cả →</a></div>
+        <div class="card">
+          {% if latest %}
+          <ul class="update-list">
+            {% for s in latest %}
+            <li>
+              <a href="{{ story_path(s) }}" tabindex="-1">{{ m.cover(s) }}</a>
+              <div style="min-width: 0;">
+                <a class="t clamp-1" href="{{ story_path(s) }}">{{ s.title }}</a>
+                <div class="c clamp-1"><a href="{{ chapter_path(s, s.last_chapter_n) }}">Chương {{ s.last_chapter_n }}{% if s.last_chapter_title %}: {{ s.last_chapter_title }}{% endif %}</a></div>
+              </div>
+              <div class="g clamp-1">{{ s.genres[:2]|map(attribute="name")|join(", ") }}</div>
+              <div class="when">{{ s.last_chapter_at|time_ago }}</div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<div class="empty">{{ m.icon("book") }}<p>Chưa có truyện nào. Hãy là người đầu tiên <a href="/dang-truyen/moi" style="color: var(--primary)">đăng truyện</a>!</p></div>{% endif %}
+        </div>
+      </section>
+
+      {% if completed %}
+      <section class="section">
+        <div class="section-head"><h2>{{ m.icon("check") }} Truyện hoàn thành</h2><a class="more" href="/hoan-thanh">Xem tất cả →</a></div>
+        <div class="hscroll">{% for s in completed %}{{ m.story_card(s, false) }}{% endfor %}</div>
+      </section>
+      {% endif %}
+
+      {% if newest %}
+      <section class="section">
+        <div class="section-head"><h2>{{ m.icon("plus") }} Truyện mới đăng</h2><a class="more" href="/danh-sach?sap-xep=moi-dang">Xem tất cả →</a></div>
+        <div class="grid-cards">{% for s in newest[:10] %}{{ m.story_card(s) }}{% endfor %}</div>
+      </section>
+      {% endif %}
+    </div>
+
+    <aside>
+      <section class="card" style="margin-bottom: 18px;" data-tabs>
+        <div class="section-head" style="padding: 16px 16px 0; margin: 0;">
+          <h2 style="font-size: 1.1rem;">{{ m.icon("trophy") }} Đọc nhiều</h2>
+          <div class="tabs" role="tablist">
+            <button type="button" class="on" data-tab="week" role="tab">Tuần</button>
+            <button type="button" data-tab="all" role="tab">Tất cả</button>
+          </div>
+        </div>
+        {% for key, rows in [("week", top_week), ("all", top_all)] %}
+        <ol class="rank-list {{ 'hidden' if key == 'all' }}" data-pane="{{ key }}">
+          {% for s in rows %}
+          <li>
+            <span class="num">{{ loop.index }}</span>
+            {% if loop.index <= 3 %}<a href="{{ story_path(s) }}" tabindex="-1">{{ m.cover(s) }}</a>{% endif %}
+            <div style="min-width: 0;">
+              <a class="t clamp-1" href="{{ story_path(s) }}">{{ s.title }}</a>
+              <div class="m">{{ m.icon("eye") }} {{ (s.week_views if key == "week" and s.week_views else s.views)|num }} · {{ s.chapter_count }} chương</div>
+            </div>
+          </li>
+          {% else %}<li class="muted">Chưa có dữ liệu</li>{% endfor %}
+        </ol>
+        {% endfor %}
+        <div style="padding: 0 16px 14px;"><a class="btn btn-ghost btn-sm btn-block" href="/xep-hang">Bảng xếp hạng đầy đủ</a></div>
+      </section>
+
+      <section class="card side-box donate-cta">
+        <h3>{{ m.icon("gift") }} Ủng hộ {{ settings.site_name }}</h3>
+        <p class="small" style="color: var(--text-2);">Trang miễn phí và không quảng cáo phiền phức. Mỗi ly cà phê bạn mời giúp trang duy trì máy chủ và dịch thêm truyện mới.</p>
+        <a class="btn btn-sm" href="/ung-ho">Ủng hộ ngay</a>
+      </section>
+
+      <section class="card side-box">
+        <h3>{{ m.icon("edit") }} Bạn viết truyện?</h3>
+        <p class="small" style="color: var(--text-2);">Đăng truyện của bạn, nhận ủng hộ trực tiếp từ bạn đọc qua mã QR ngân hàng, MoMo.</p>
+        <a class="btn btn-ghost btn-sm" href="/dang-truyen/moi">Đăng truyện</a>
+      </section>
+    </aside>
+  </div>
+</div>
+{% endblock %}

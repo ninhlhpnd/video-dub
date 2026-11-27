@@ -14,6 +14,9 @@ Trả về JSON: {{"title": "...", "description": "...", "hashtags": ["#..."]}}"
 
 
 def run(proj: Project, settings):
+    if proj.opt.get("mode") == "story":  # truyện kể: Claude đã viết sẵn lúc chia cảnh
+        from . import story
+        return story.caption(proj)
     segs = proj.segments()
     script = " ".join(s.get("vi", "") for s in segs if s.get("vi")).strip()
     if not script:

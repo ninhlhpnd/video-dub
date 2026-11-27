@@ -12,7 +12,9 @@ import '../jobs.dart';
 import '../main.dart';
 import '../models.dart';
 import 'project_page.dart';
+import 'series_page.dart';
 import 'settings_page.dart';
+import 'story_page.dart';
 
 const videoExts = {'.mp4', '.mov', '.mkv', '.avi', '.webm', '.flv', '.m4v', '.wmv', '.ts'};
 
@@ -149,13 +151,22 @@ class _HomePageState extends State<HomePage> {
         ),
       );
 
+  /// Tạo project Truyện kể mới (AI viết, không cần video gốc).
+  Future<void> _newStory() async {
+    final ev = await Engine.once(['new_story', '--workspace', settings.workspace],
+        engineOverride: settings.get('engine_dir'));
+    if (ev.type == 'error') return _showError('Không tạo được truyện', ev.msg);
+    final pr = Project.tryLoad(ev.data['project']);
+    if (pr != null) _open(pr);
+  }
+
   Future<void> _pick() async {
     final files = await FilePicker.pickFiles(type: FileType.video, dialogTitle: 'Chọn video cần lồng tiếng');
     await _addVideos(files.map((e) => e.path).whereType<String>().toList());
   }
 
   Future<void> _open(Project pr) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectPage(project: pr)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => pr.isStory ? StoryPage(project: pr) : ProjectPage(project: pr)));
     _refresh();
   }
 
@@ -299,6 +310,18 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 10),
                 FilledButton.tonalIcon(
                     onPressed: _pasteLink, icon: const Icon(Icons.link), label: const Text('Dán link')),
+                const SizedBox(width: 10),
+                FilledButton.tonalIcon(
+                    onPressed: _newStory, icon: const Icon(Icons.auto_stories), label: const Text('Tạo truyện')),
+                const SizedBox(width: 10),
+                FilledButton.tonalIcon(
+                  onPressed: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SeriesListPage()));
+                    _refresh();
+                  },
+                  icon: const Icon(Icons.menu_book),
+                  label: const Text('Truyện dài'),
+                ),
               ],
             ),
     );

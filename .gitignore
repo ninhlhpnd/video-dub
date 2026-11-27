@@ -1,6 +1,7 @@
 # Môi trường Python & cache
 engine/.venv/
 engine/.venv_tts/
+engine/.venv_img/
 __pycache__/
 *.pyc
 

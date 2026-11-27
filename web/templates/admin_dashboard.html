@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Quản trị | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap">
+  {% include "_admin_nav.html" %}
+  <div class="kpis">
+    <div class="card kpi"><span>Truyện</span><b>{{ stats.stories|num }}</b><div class="small muted">{{ stats.public }} đang hiện</div></div>
+    <div class="card kpi"><span>Chương</span><b>{{ stats.chapters|num }}</b></div>
+    <div class="card kpi"><span>Thành viên</span><b>{{ stats.users|num }}</b></div>
+    <div class="card kpi"><span>Lượt đọc hôm nay</span><b>{{ stats.views_today|num }}</b><div class="small muted">tổng {{ stats.views_total|num }}</div></div>
+    <div class="card kpi"><span>Bình luận</span><b>{{ stats.comments|num }}</b></div>
+    <div class="card kpi"><span>Việc dịch đang chạy</span><b>{{ stats.jobs_active }}</b>{% if stats.jobs_error %}<div class="small" style="color: var(--danger)">{{ stats.jobs_error }} bị lỗi</div>{% endif %}</div>
+    <div class="card kpi"><span>Chi phí AI</span><b>${{ "%.2f"|format(stats.cost or 0) }}</b></div>
+    <div class="card kpi"><span>Ủng hộ trang chờ duyệt</span><b>{{ stats.donations_pending }}</b></div>
+  </div>
+  <div class="layout-side">
+    <section class="card card-pad">
+      <h2 style="font-size: 1.05rem;">Lượt đọc 14 ngày</h2>
+      {% set peak = (chart|map(attribute="v")|max) if chart else 1 %}
+      <div class="bars" style="margin-bottom: 26px;">
+        {% for d in chart %}<div style="height: {{ (d.v / (peak or 1) * 100)|round }}%" title="{{ d.day }}: {{ d.v }} lượt"><span>{{ d.day[8:] }}/{{ d.day[5:7] }}</span></div>{% else %}<p class="muted">Chưa có dữ liệu.</p>{% endfor %}
+      </div>
+      <h2 style="font-size: 1.05rem; margin-top: 20px;">Bình luận mới</h2>
+      {% for c in recent_comments %}
+      <div class="pay-line" style="align-items: flex-start;"><span><b>{{ c.username }}</b> · <a href="/truyen/{{ c.slug }}#binh-luan">{{ c.title|truncate(30) }}</a></span><span class="small" style="text-align: right; flex: 1;">{{ c.body|truncate(90) }}</span></div>
+      {% else %}<p class="muted small">Chưa có.</p>{% endfor %}
+    </section>
+    <aside class="card side-box">
+      <h3>{{ m.icon("user") }} Thành viên mới</h3>
+      <ul class="supporters">
+        {% for u in recent_users %}<li>{{ m.avatar(u, "sm") }}<div><b>{{ u.username }}</b><div class="msg">{{ ROLE_LABEL[u.role] }} · {{ u.created_at|time_ago }}</div></div></li>{% endfor %}
+      </ul>
+    </aside>
+  </div>
+</div>
+{% endblock %}

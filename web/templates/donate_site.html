@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Ủng hộ {{ settings.site_name }}{% endblock %}
+{% block description %}Ủng hộ {{ settings.site_name }} duy trì máy chủ, dịch thêm truyện mới và giữ trang đọc miễn phí.{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 900px;">
+  <h1 class="page-title">{{ m.icon("gift") }} Ủng hộ {{ settings.site_name }}</h1>
+  <p class="page-sub">Trang đọc miễn phí. Tiền ủng hộ dùng để trả máy chủ, tên miền và chi phí AI dịch truyện. Cảm ơn bạn rất nhiều!</p>
+  <div class="layout-side" style="grid-template-columns: minmax(0, 1fr);">
+    <div class="grid-2" style="gap: 18px;">
+      <section class="card card-pad">
+        {% if payee %}
+        {% if payee.bank and payee.account %}
+        <h2 style="font-size: 1.1rem;">Chuyển khoản qua mã QR</h2>
+        <div class="amounts" role="group" aria-label="Chọn số tiền" data-inline-donate
+             data-bank="{{ payee.bank }}" data-account="{{ payee.account }}" data-holder="{{ payee.holder }}" data-note="{{ donate_note }}">
+          {% for a in PRESET_AMOUNTS %}<button type="button" data-amount="{{ a }}" class="{{ 'on' if a == 50000 }}">{{ (a // 1000) }}k</button>{% endfor %}
+        </div>
+        <input type="number" min="1000" step="1000" inputmode="numeric" placeholder="Số khác (đồng)" data-amount-input aria-label="Số tiền khác">
+        <div class="qr-box"><img data-qr alt="Mã QR ủng hộ trang" width="300" height="340" src="{{ vietqr(payee.bank, payee.account, 50000, donate_note, payee.holder) }}"></div>
+        <div class="pay-line"><span>Ngân hàng</span><b>{{ payee.bank_name }}</b></div>
+        <div class="pay-line"><span>Số tài khoản</span><b>{{ payee.account }}<button class="copy" type="button" data-copy="{{ payee.account }}">Chép</button></b></div>
+        {% if payee.holder %}<div class="pay-line"><span>Chủ tài khoản</span><b>{{ payee.holder }}</b></div>{% endif %}
+        <div class="pay-line"><span>Nội dung</span><b>{{ donate_note }}<button class="copy" type="button" data-copy="{{ donate_note }}">Chép</button></b></div>
+        {% endif %}
+        {% if payee.momo %}<div class="pay-line"><span>MoMo</span><b>{{ payee.momo }}<button class="copy" type="button" data-copy="{{ payee.momo }}">Chép</button></b></div>{% endif %}
+        {% if payee.paypal %}<a class="btn btn-ghost btn-block" style="margin-top: 12px;" href="{{ payee.paypal }}" target="_blank" rel="noopener nofollow">Ủng hộ qua PayPal / Ko-fi</a>{% endif %}
+        {% else %}
+        <div class="empty">{{ m.icon("gift") }}<p>Quản trị viên chưa cấu hình thông tin nhận ủng hộ.</p></div>
+        {% endif %}
+      </section>
+      <section>
+        <div class="card card-pad" style="margin-bottom: 18px;">
+          <h2 style="font-size: 1.1rem;">Báo đã ủng hộ</h2>
+          <p class="small muted">Gửi để tên bạn hiện trên bảng vinh danh sau khi quản trị viên kiểm tra.</p>
+          <form method="post" action="/ung-ho/bao-cao">
+            {{ m.csrf_field() }}
+            <input type="hidden" name="target" value="site"><input type="hidden" name="next" value="/ung-ho">
+            <div class="field"><label for="a">Số tiền (đồng)</label><input id="a" type="number" name="amount" min="1000" step="1000" value="50000" required data-claim-amount></div>
+            <div class="field"><label for="n">Tên hiển thị</label><input id="n" type="text" name="donor_name" maxlength="40" value="{{ user.display_name if user else '' }}" placeholder="Ẩn danh"></div>
+            <div class="field"><label for="msg">Lời nhắn</label><input id="msg" type="text" name="message" maxlength="300"></div>
+            <button class="btn btn-block" type="submit">Gửi</button>
+          </form>
+        </div>
+        <div class="card side-box">
+          <h3>{{ m.icon("trophy") }} Mạnh thường quân</h3>
+          {% if supporters %}
+          <ul class="supporters">
+            {% for d in supporters %}<li><div style="min-width: 0;"><b>{{ d.donor_name }}</b>{% if d.message %}<div class="msg clamp-1">“{{ d.message }}”</div>{% endif %}</div><span class="amt">{{ d.total|money }}</span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="small muted" style="margin: 0;">Chưa có ai. Bạn sẽ là người đầu tiên chứ?</p>{% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+  <p class="note">Trang không thu tiền trực tiếp và không lưu thông tin thẻ/ngân hàng của bạn. Mã QR do VietQR tạo, tiền chuyển thẳng tới tài khoản người nhận.</p>
+</div>
+{% endblock %}

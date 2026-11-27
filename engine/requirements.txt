@@ -20,3 +20,7 @@ yt-dlp>=2026.10.26
 # dò chữ Trung in trên video (bước overlays), chạy trên CPU
 onnxruntime==1.31.0
 rapidocr==3.10.0
+# viết truyện (chế độ Truyện kể)
+anthropic==2.14.0
+pillow==13.0.0
+httpx>=0.28

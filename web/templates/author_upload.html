@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Tải file chương – {{ s.title }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 860px;">
+  <div class="row" style="margin: 22px 0 4px;"><a class="small muted" href="/dang-truyen/{{ s.id }}">← {{ s.title }}</a></div>
+  <h1 class="page-title" style="margin-top: 4px;">{{ m.icon("upload") }} Tải nhiều chương từ file .txt</h1>
+  <p class="page-sub">File được tự tách thành chương theo dòng tiêu đề như <code>Chương 12: Tên chương</code>, <code>Chương 12 - Tên</code>, <code>第12章 ...</code>. Mã hoá UTF-8, GBK hay Big5 đều đọc được.</p>
+  <form class="card card-pad" method="post" action="/dang-truyen/{{ s.id }}/tai-len" enctype="multipart/form-data">
+    {{ m.csrf_field() }}
+    <div class="field"><label for="file">File .txt</label><input id="file" type="file" name="file" accept=".txt,text/plain"></div>
+    <div class="field"><label for="text">…hoặc dán nội dung</label><textarea id="text" name="text" rows="8" placeholder="Chương 1: Mở đầu&#10;&#10;Nội dung…&#10;&#10;Chương 2: …"></textarea></div>
+    <div class="grid-2">
+      <div class="field"><label for="numbering">Đánh số chương</label>
+        <select id="numbering" name="numbering">
+          <option value="auto">Tự động (theo số trong tiêu đề, lộn xộn thì đánh tuần tự)</option>
+          <option value="heading">Luôn theo số trong tiêu đề</option>
+          <option value="seq">Tuần tự, bắt đầu từ số bên cạnh</option>
+        </select></div>
+      <div class="field"><label for="start">Bắt đầu từ chương</label><input id="start" type="number" name="start" value="{{ next_n }}" min="1"></div>
+    </div>
+    <div class="field">
+      <label class="check"><input type="radio" name="mode" value="publish" checked> Đăng ngay</label>
+      <label class="check"><input type="radio" name="mode" value="draft"> Lưu nháp để xem lại trước</label>
+    </div>
+    <div class="field"><label class="check"><input type="checkbox" name="overwrite" value="1"> Ghi đè chương đã có cùng số</label></div>
+    <button class="btn btn-lg" type="submit">{{ m.icon("upload") }} Tải lên</button>
+  </form>
+</div>
+{% endblock %}

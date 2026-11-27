@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}{{ s.title }}{% if s.author_name %} – {{ s.author_name }}{% endif %} | Đọc truyện {{ settings.site_name }}{% endblock %}
+{% block og %}
+<meta property="og:type" content="book">
+<meta property="og:title" content="{{ s.title }}">
+<meta property="og:description" content="{{ meta_description }}">
+<meta property="og:url" content="{{ canonical }}">
+{% if s.cover %}<meta property="og:image" content="{{ base }}/media/covers/{{ s.cover }}">{% endif %}
+<meta name="twitter:card" content="summary_large_image">
+{% endblock %}
+{% block head %}
+<link rel="alternate" type="application/rss+xml" title="{{ s.title }}" href="{{ story_path(s) }}/rss.xml">
+<script type="application/ld+json">{{ {"@context": "https://schema.org", "@type": "Book", "name": s.title, "author": {"@type": "Person", "name": s.author_name or "Ẩn danh"}, "url": canonical, "numberOfPages": s.chapter_count, "inLanguage": "vi", "genre": genres|map(attribute="name")|list, "aggregateRating": ({"@type": "AggregateRating", "ratingValue": rating, "ratingCount": s.rating_count} if s.rating_count else none)}|tojson_attr }}</script>
+{% endblock %}
+{% block content %}
+<section class="story-hero">
+  {% if s.cover %}<div class="bg" style="background-image: url('/media/covers/{{ s.cover }}')"></div>{% endif %}
+  <div class="wrap">
+    <div class="story-head">
+      {% call m.cover(s) %}{% if s.status == "completed" %}<span class="badge full tag">Full</span>{% endif %}{% endcall %}
+      <div style="min-width: 0;">
+        <h1>{{ s.title }}</h1>
+        <div class="sub">
+          <span>{{ m.icon("user") }} Tác giả: <a href="/danh-sach?q={{ s.author_name|urlq }}">{{ s.author_name or "Ẩn danh" }}</a>{% if s.original_author and s.original_author != s.author_name %} <span class="muted">({{ s.original_author }})</span>{% endif %}</span>
+          {% if s.original_title and s.original_title != s.title %}<span>{{ m.icon("globe") }} Tên gốc: {{ s.original_title }}</span>{% endif %}
+          <span>{{ m.icon("edit") }} {{ "Người dịch" if s.origin == "translated" else "Người đăng" }}: <a href="/thanh-vien/{{ s.owner_username }}">{{ s.owner_name }}</a>{% if s.origin == "translated" and not s.original_author %}{% endif %}</span>
+          <span class="row" style="gap: 6px; margin-top: 6px;">
+            <span class="badge {{ 'full' if s.status == 'completed' else 'hot' }}">{{ STATUS_LABEL[s.status] }}</span>
+            <span class="badge {{ 'ai' if s.origin == 'ai' else '' }}">{{ ORIGIN_LABEL[s.origin] }}</span>
+            {% for g in genres %}<a class="badge" href="/the-loai/{{ g.slug }}">{{ g.name }}</a>{% endfor %}
+          </span>
+          <span style="margin-top: 6px;">{{ m.stars(rating, s.rating_count) }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>{{ s.chapter_count|num }}</b><span>Chương</span></div>
+      <div class="stat"><b>{{ s.views|num }}</b><span>Lượt đọc</span></div>
+      <div class="stat"><b data-follow-count>{{ s.follows|num }}</b><span>Theo dõi</span></div>
+      <div class="stat"><b>{{ words|num }}</b><span>Chữ</span></div>
+    </div>
+    <div class="actions" data-story-actions data-story-id="{{ s.id }}" data-slug="{{ s.slug }}" data-server-n="{{ history or '' }}">
+      {% if first_n %}
+      <a class="btn btn-lg" href="{{ chapter_path(s, first_n) }}" data-read-start>{{ m.icon("book-open") }} Đọc từ đầu</a>
+      <a class="btn btn-lg btn-soft {{ '' if history else 'hidden' }}" href="{{ chapter_path(s, history or first_n) }}" data-read-continue>{{ m.icon("bookmark") }} <span>Đọc tiếp{% if history %} chương {{ history }}{% endif %}</span></a>
+      {% endif %}
+      {% if user %}
+      <form method="post" action="/truyen/{{ s.id }}/theo-doi" data-ajax-follow>{{ m.csrf_field() }}
+        <button class="btn btn-lg btn-ghost {{ 'is-on' if following }}" type="submit">{{ m.icon("heart") }} <span>{{ "Đang theo dõi" if following else "Theo dõi" }}</span></button>
+      </form>
+      {% else %}
+      <a class="btn btn-lg btn-ghost" href="/dang-nhap?next={{ story_path(s)|urlq }}">{{ m.icon("heart") }} Theo dõi</a>
+      {% endif %}
+      <button class="btn btn-lg btn-ghost" type="button" data-open-donate>{{ m.icon("gift") }} Ủng hộ</button>
+      {% if can_edit %}<a class="btn btn-lg btn-ghost" href="/dang-truyen/{{ s.id }}">{{ m.icon("edit") }} Quản lý</a>{% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="layout-side">
+    <div class="story-body">
+      <section class="card card-pad">
+        <h2 style="font-size: 1.15rem;">Giới thiệu</h2>
+        <div class="desc-wrap" data-collapse>
+          <div class="desc">{{ s.description or "Chưa có giới thiệu." }}</div>
+        </div>
+        <div class="row" style="margin-top: 16px; justify-content: space-between;">
+          <div>
+            {% if user %}
+            <span class="small muted">Đánh giá của bạn:</span>
+            <form class="rate-form" method="post" action="/truyen/{{ s.id }}/danh-gia" data-ajax-rate>{{ m.csrf_field() }}
+              {% for i in range(5, 0, -1) %}<button type="submit" name="stars" value="{{ i }}" class="{{ 'on' if my_rating >= i }}" aria-label="{{ i }} sao">{{ m.icon("star") }}</button>{% endfor %}
+            </form>
+            {% else %}<a class="small" style="color: var(--primary)" href="/dang-nhap?next={{ story_path(s)|urlq }}">Đăng nhập để đánh giá</a>{% endif %}
+          </div>
+          <a class="small muted" href="{{ story_path(s) }}/rss.xml">{{ m.icon("rss") }} RSS</a>
+        </div>
+      </section>
+
+      <section class="card card-pad" style="margin-top: 18px;" id="danh-sach-chuong">
+        <div class="toc-head">
+          <h2 style="font-size: 1.15rem; margin: 0;">Danh sách chương</h2>
+          <div class="tabs">
+            <a class="{{ 'on' if order == 'asc' }}" href="{{ story_path(s) }}#danh-sach-chuong">Cũ nhất</a>
+            <a class="{{ 'on' if order == 'desc' }}" href="{{ story_path(s) }}?thu-tu=moi#danh-sach-chuong">Mới nhất</a>
+          </div>
+        </div>
+        {% if s.last_chapter_n %}<p class="small muted" style="margin: 0 0 6px;">Mới nhất: <a style="color: var(--primary)" href="{{ chapter_path(s, s.last_chapter_n) }}">Chương {{ s.last_chapter_n }}{% if s.last_chapter_title %}: {{ s.last_chapter_title }}{% endif %}</a> · {{ s.last_chapter_at|time_ago }}</p>{% endif %}
+        {% if chapters %}
+        <ul class="chapter-grid" data-chapter-list data-story-id="{{ s.id }}">
+          {% for c in chapters %}
+          <li><a href="{{ chapter_path(s, c.n) }}" data-n="{{ c.n }}" class="{{ 'cur' if history == c.n }}"><span class="n">Chương {{ c.n }}{% if c.title %}:{% endif %}</span> <span class="clamp-1">{{ c.title }}</span></a></li>
+          {% endfor %}
+        </ul>
+        {{ m.pagination(page, story_path(s), {"thu-tu": "moi" if order == "desc" else ""}, "trang", "#danh-sach-chuong") }}
+        {% else %}<div class="empty">Truyện chưa có chương nào.</div>{% endif %}
+      </section>
+
+      <section class="card card-pad" style="margin-top: 18px;" id="binh-luan">
+        {% set chapter_id = none %}
+        {% include "_comments.html" %}
+      </section>
+    </div>
+
+    <aside>
+      <section class="card side-box donate-cta">
+        <h3>{{ m.icon("gift") }} Ủng hộ {{ "tác giả" if donate_target == "author" else settings.site_name }}</h3>
+        <p class="small" style="color: var(--text-2);">{% if donate_target == "author" %}Tiền ủng hộ chuyển thẳng tới {{ s.owner_name }} qua mã QR ngân hàng/MoMo. Mỗi chút động viên giúp truyện ra chương đều hơn!{% else %}Người đăng chưa khai báo tài khoản nhận ủng hộ. Bạn có thể ủng hộ trang để duy trì máy chủ.{% endif %}</p>
+        <button class="btn btn-sm" type="button" data-open-donate>Ủng hộ ngay</button>
+      </section>
+
+      <section class="card side-box">
+        <h3>{{ m.icon("trophy") }} Bảng vinh danh</h3>
+        {% if supporters %}
+        <ul class="supporters">
+          {% for d in supporters %}
+          <li><span class="num badge {{ 'hot' if loop.index <= 3 }}">{{ loop.index }}</span>
+            <div style="min-width: 0;"><b class="clamp-1">{{ d.donor_name }}</b>{% if d.message %}<div class="msg clamp-1">“{{ d.message }}”</div>{% endif %}</div>
+            <span class="amt">{{ d.total|money }}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="small muted" style="margin: 0;">Chưa có ai ủng hộ. Hãy là người đầu tiên!</p>{% endif %}
+      </section>
+
+      {% if related %}
+      <section class="card side-box">
+        <h3>{{ m.icon("book") }} Truyện cùng thể loại</h3>
+        <ol class="rank-list" style="padding: 0;">
+          {% for r in related %}
+          <li style="padding: 8px 0;"><a href="{{ story_path(r) }}" tabindex="-1">{{ m.cover(r) }}</a>
+            <div style="min-width: 0;"><a class="t clamp-1" href="{{ story_path(r) }}">{{ r.title }}</a><div class="m">{{ r.chapter_count }} chương · {{ r.views|num }} lượt đọc</div></div></li>
+          {% endfor %}
+        </ol>
+      </section>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% include "_donate_modal.html" %}
+{% endblock %}

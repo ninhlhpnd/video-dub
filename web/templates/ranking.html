@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Bảng xếp hạng truyện | {{ settings.site_name }}{% endblock %}
+{% block content %}
+<div class="wrap">
+  <div class="row" style="justify-content: space-between; margin: 26px 0 16px;">
+    <h1 class="page-title" style="margin: 0;">{{ m.icon("trophy") }} Bảng xếp hạng</h1>
+    <div class="tabs">
+      <a class="{{ 'on' if period == 'tuan' }}" href="/xep-hang?ky=tuan">Tuần</a>
+      <a class="{{ 'on' if period == 'thang' }}" href="/xep-hang?ky=thang">Tháng</a>
+      <a class="{{ 'on' if period == 'tat-ca' }}" href="/xep-hang?ky=tat-ca">Mọi lúc</a>
+    </div>
+  </div>
+  <div class="card">
+    {% if stories %}
+    <ol class="rank-list rank-big">
+      {% for s in stories %}
+      <li>
+        <span class="num">{{ loop.index }}</span>
+        <a href="{{ story_path(s) }}" tabindex="-1">{{ m.cover(s) }}</a>
+        <div style="min-width: 0; flex: 1;">
+          <a class="t clamp-1" href="{{ story_path(s) }}" style="font-size: 1rem;">{{ s.title }}</a>
+          <div class="m">{{ s.author_name or "Ẩn danh" }} · {{ s.chapter_count }} chương · {{ STATUS_LABEL[s.status] }}</div>
+          <div class="m clamp-1 only-desktop">{{ s.description|excerpt(140) }}</div>
+        </div>
+        <div style="text-align: right;" class="nowrap"><b>{{ s.period_views|num }}</b><div class="m">lượt đọc</div></div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}<div class="empty">{{ m.icon("trophy") }}<p>Chưa có dữ liệu xếp hạng trong khoảng này.</p></div>{% endif %}
+  </div>
+</div>
+{% endblock %}

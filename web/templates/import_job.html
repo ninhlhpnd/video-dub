@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Dịch: {{ job.title }} | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+{% set pct = ((stats.done / stats.total * 100) if stats.total else 0)|round(1) %}
+<div class="wrap" style="max-width: 1000px;" data-job="{{ job.id }}" data-job-status="{{ job.status }}">
+  <div class="row" style="margin: 22px 0 4px;"><a class="small muted" href="/nhap-truyen">← Nhập truyện Trung</a></div>
+  <div class="row" style="justify-content: space-between;">
+    <h1 class="page-title" style="margin: 4px 0;">{{ job.title }}</h1>
+    <div class="row">
+      {% if job.chapter_count %}<a class="btn btn-ghost btn-sm" href="/truyen/{{ job.slug }}">{{ m.icon("eye") }} Xem truyện</a>{% endif %}
+      <a class="btn btn-ghost btn-sm" href="/dang-truyen/{{ job.story_id }}">{{ m.icon("edit") }} Sửa thông tin</a>
+      <a class="btn btn-ghost btn-sm" href="/nhap-truyen/{{ job.id }}/tu-dien">{{ m.icon("book") }} Bảng thuật ngữ ({{ glossary_count }})</a>
+    </div>
+  </div>
+  {% if job.original_title %}<p class="muted" style="margin: 0 0 14px;">{{ job.original_title }}{% if job.source_url %} · <a href="{{ job.source_url }}" rel="noopener nofollow" target="_blank">nguồn</a>{% endif %}</p>{% endif %}
+
+  <section class="card card-pad">
+    <div class="row" style="justify-content: space-between; margin-bottom: 10px;">
+      <div><span class="status-dot {{ job.status }}" data-st-dot></span><b data-st-text>{{ STATUS_TEXT[job.status] }}</b> · <span data-st-msg class="muted">{{ job.message }}</span></div>
+      <div class="small muted">AI: <b>{{ providers.get(job.provider, job.provider) }}</b></div>
+    </div>
+    <div class="progressbar"><div data-st-bar style="width: {{ pct }}%"></div></div>
+    <div class="row small muted" style="justify-content: space-between; margin-top: 8px;">
+      <span><b data-st-done>{{ stats.done }}</b>/<span data-st-total>{{ stats.total }}</span> chương đã dịch · đích: tới chương <b data-st-target>{{ job.target_n }}</b>{% if stats.error %} · <span style="color: var(--danger)"><b data-st-error>{{ stats.error }}</b> lỗi</span>{% endif %}</span>
+      <span>Đã tốn: <b data-st-cost>${{ "%.3f"|format(job.cost_usd) }}</b> · {{ job.tokens_in|num }} token vào / {{ job.tokens_out|num }} token ra</span>
+    </div>
+    {% if job.error %}<div class="alert error" style="margin: 14px 0 0;" data-st-err>{{ job.error }}</div>{% endif %}
+
+    <div class="row" style="margin-top: 18px;">
+      {% if job.status in ("queued", "running") %}
+      <form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong">{{ m.csrf_field() }}<button class="btn btn-ghost" name="action" value="pause">Tạm dừng</button></form>
+      {% else %}
+      <form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong">{{ m.csrf_field() }}<button class="btn" name="action" value="resume">Chạy tiếp</button></form>
+      {% endif %}
+      <form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong" class="row" style="gap: 6px;">{{ m.csrf_field() }}
+        <input type="number" name="count" value="10" min="1" max="2000" style="width: 90px;" aria-label="Số chương dịch tiếp">
+        <button class="btn btn-soft" name="action" value="more">Dịch tiếp N chương</button>
+      </form>
+      {% if stats.error %}<form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong">{{ m.csrf_field() }}<button class="btn btn-ghost" name="action" value="retry">Thử lại chương lỗi</button></form>{% endif %}
+      {% if job.source_url %}<form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong">{{ m.csrf_field() }}<button class="btn btn-ghost" name="action" value="refresh_toc">Lấy chương mới từ nguồn</button></form>{% endif %}
+    </div>
+  </section>
+
+  <div class="grid-2" style="gap: 18px; margin-top: 18px;">
+    <section class="card card-pad">
+      <h2 style="font-size: 1.05rem;">Ước tính chi phí Claude</h2>
+      <p class="small muted">Model <code>{{ claude_model }}</code>{% if claude_price %} (${{ claude_price[0] }} / ${{ claude_price[1] }} mỗi triệu token vào/ra){% endif %}. Trung bình {{ stats.avg_chars|num }} chữ Hán/chương. Gemini gói miễn phí: $0 (giới hạn lượt/ngày).</p>
+      <div class="pay-line"><span>10 chương</span><b>~${{ "%.2f"|format(estimates[10]) }}</b></div>
+      <div class="pay-line"><span>50 chương</span><b>~${{ "%.2f"|format(estimates[50]) }}</b></div>
+      <div class="pay-line"><span>100 chương</span><b>~${{ "%.2f"|format(estimates[100]) }}</b></div>
+    </section>
+    <section class="card card-pad">
+      <h2 style="font-size: 1.05rem;">Tuỳ chọn</h2>
+      <form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong" class="row" style="margin-bottom: 12px;">{{ m.csrf_field() }}
+        <select name="provider" class="grow" aria-label="AI dịch">{% for k, label in providers.items() %}<option value="{{ k }}" {{ "selected" if k == job.provider }}>{{ label }}</option>{% endfor %}</select>
+        <button class="btn btn-ghost btn-sm" name="action" value="provider">Đổi AI</button>
+      </form>
+      <form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong" data-confirm="Hỏi AI lập lại bảng thuật ngữ từ vài chương đầu? Mục đã có được giữ nguyên.">{{ m.csrf_field() }}<button class="btn btn-ghost btn-sm" name="action" value="regloss">Lập lại bảng thuật ngữ</button></form>
+      <p class="small muted" style="margin-top: 12px;">Chương mới dịch được đăng ngay. Sửa bảng thuật ngữ để các chương sau dùng tên đúng; muốn áp vào chương cũ, bấm “Dịch lại” ở chương đó.</p>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top: 18px;" id="chuong">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Tên gốc</th><th>Bản dịch</th><th>Trạng thái</th><th>Chữ Hán</th><th></th></tr></thead>
+        <tbody>
+        {% for c in chapters %}
+        <tr>
+          <td><b>{{ c.n }}</b></td>
+          <td class="small">{% if c.url %}<a href="{{ c.url }}" target="_blank" rel="noopener nofollow">{{ c.title_zh|truncate(40) }}</a>{% else %}{{ c.title_zh|truncate(40) }}{% endif %}</td>
+          <td class="small">{% if c.status == "done" %}<a href="/truyen/{{ job.slug }}/chuong-{{ c.n }}">{{ c.title_vi or "Chương " ~ c.n }}</a>{% endif %}</td>
+          <td><span class="ch-status {{ c.status }}" title="{{ c.error }}">{{ {"pending": "Chờ", "translating": "Đang dịch", "done": "Xong", "error": "Lỗi"}[c.status] }}</span>
+            {% if c.error %}<div class="small" style="color: var(--danger); max-width: 280px;">{{ c.error|truncate(120) }}</div>{% endif %}</td>
+          <td class="small muted">{{ c.chars|num if c.chars else "–" }}</td>
+          <td class="actions-cell">{% if c.status in ("done", "error") %}<form method="post" action="/nhap-truyen/{{ job.id }}/hanh-dong">{{ m.csrf_field() }}<input type="hidden" name="n" value="{{ c.n }}"><button class="btn btn-ghost btn-sm" name="action" value="retranslate">Dịch lại</button></form>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">Chưa có chương (đang chờ tải mục lục…).</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{ m.pagination(page, "/nhap-truyen/" ~ job.id, {}, "trang", "#chuong") }}
+</div>
+{% endblock %}

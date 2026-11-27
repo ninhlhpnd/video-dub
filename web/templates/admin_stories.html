@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Truyện | Quản trị{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap">
+  {% include "_admin_nav.html" %}
+  <form class="row" style="margin-bottom: 14px;"><input class="grow" type="search" name="q" value="{{ kw }}" placeholder="Tìm tên truyện" aria-label="Tìm truyện"><button class="btn btn-ghost">Tìm</button></form>
+  <div class="card table-wrap">
+    <table class="table">
+      <thead><tr><th>Truyện</th><th>Người đăng</th><th>Chương</th><th>Lượt đọc</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody>
+      {% for s in rows %}
+      <tr>
+        <td><a href="/truyen/{{ s.slug }}"><b>{{ s.title|truncate(50) }}</b></a><div class="small muted">{{ ORIGIN_LABEL[s.origin] }} · {{ STATUS_LABEL[s.status] }}</div></td>
+        <td class="small">@{{ s.username }}</td>
+        <td>{{ s.chapter_count }}</td>
+        <td>{{ s.views|num }}</td>
+        <td class="nowrap">{% if s.is_featured %}<span class="badge hot">Nổi bật</span>{% endif %} {% if s.is_hidden %}<span class="badge danger">Ẩn</span>{% endif %}</td>
+        <td class="actions-cell">
+          <form method="post" action="/quan-tri/truyen/{{ s.id }}">{{ m.csrf_field() }}
+            <button class="btn btn-ghost btn-sm" name="action" value="feature">{{ "Bỏ nổi bật" if s.is_featured else "Nổi bật" }}</button>
+            <button class="btn btn-ghost btn-sm" name="action" value="hide">{{ "Hiện" if s.is_hidden else "Ẩn" }}</button>
+          </form>
+          <a class="btn btn-ghost btn-sm" href="/dang-truyen/{{ s.id }}">Sửa</a>
+          <form method="post" action="/quan-tri/truyen/{{ s.id }}" data-prompt="Nhập mã truyện “{{ s.slug }}” để xoá vĩnh viễn:">{{ m.csrf_field() }}<input type="hidden" name="confirm" value=""><input type="hidden" name="action" value="delete"><button class="btn btn-danger btn-sm" type="submit">Xoá</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ m.pagination(page, "/quan-tri/truyen", {"q": kw}) }}
+</div>
+{% endblock %}

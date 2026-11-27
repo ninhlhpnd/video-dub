@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Đăng ký | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="card">
+    <h1>Tạo tài khoản</h1>
+    <p class="muted" style="text-align: center;">Theo dõi truyện, nhận thông báo chương mới, đăng truyện của riêng bạn.</p>
+    {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+    <form method="post" action="/dang-ky">
+      {{ m.csrf_field() }}
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field"><label for="u">Tên đăng nhập</label><input id="u" type="text" name="username" value="{{ username or '' }}" autocomplete="username" required pattern="[A-Za-z0-9_.]{3,30}" title="3-30 ký tự: chữ không dấu, số, dấu chấm, gạch dưới"><div class="hint">3-30 ký tự, chữ không dấu, số, dấu chấm hoặc gạch dưới.</div></div>
+      <div class="field"><label for="d">Tên hiển thị</label><input id="d" type="text" name="display_name" value="{{ display_name or '' }}" maxlength="50" placeholder="Ví dụ: Mèo Lười Đọc Truyện"></div>
+      <div class="field"><label for="e">Email <span class="muted">(không bắt buộc)</span></label><input id="e" type="email" name="email" value="{{ email or '' }}" autocomplete="email"></div>
+      <div class="grid-2">
+        <div class="field"><label for="p">Mật khẩu</label><input id="p" type="password" name="password" autocomplete="new-password" minlength="6" required></div>
+        <div class="field"><label for="p2">Nhập lại</label><input id="p2" type="password" name="password2" autocomplete="new-password" minlength="6" required></div>
+      </div>
+      <button class="btn btn-block btn-lg" type="submit">Đăng ký</button>
+    </form>
+    <p class="alt">Đã có tài khoản? <a href="/dang-nhap{% if next and next != '/' %}?next={{ next|urlq }}{% endif %}">Đăng nhập</a></p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Quản lý: {{ s.title }} | {{ settings.site_name }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 1000px;">
+  <div class="row" style="margin: 22px 0 4px;"><a class="small muted" href="/dang-truyen">← Truyện của tôi</a></div>
+  <div class="row" style="justify-content: space-between; margin-bottom: 14px;">
+    <h1 class="page-title" style="margin: 0;">{{ s.title }}</h1>
+    <div class="row">
+      {% if s.chapter_count %}<a class="btn btn-ghost btn-sm" href="{{ story_path(s) }}">{{ m.icon("eye") }} Xem trên trang</a>{% endif %}
+      {% if job %}<a class="btn btn-ghost btn-sm" href="/nhap-truyen/{{ job.id }}">{{ m.icon("translate") }} Việc dịch</a>{% endif %}
+    </div>
+  </div>
+
+  <section class="card card-pad" id="chuong">
+    <div class="row" style="justify-content: space-between; margin-bottom: 12px;">
+      <h2 style="font-size: 1.15rem; margin: 0;">Chương ({{ total }})</h2>
+      <div class="row">
+        <a class="btn btn-sm" href="/dang-truyen/{{ s.id }}/chuong/moi">{{ m.icon("plus") }} Viết chương {{ next_n }}</a>
+        <a class="btn btn-ghost btn-sm" href="/dang-truyen/{{ s.id }}/tai-len">{{ m.icon("upload") }} Tải file .txt</a>
+      </div>
+    </div>
+    {% if chapters %}
+    <form method="post" action="/dang-truyen/{{ s.id }}/chuong/hang-loat" id="bulk-form">
+      {{ m.csrf_field() }}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th style="width: 28px;"><input type="checkbox" data-check-all aria-label="Chọn tất cả"></th><th>Số</th><th>Tên chương</th><th>Trạng thái</th><th>Chữ</th><th>Lượt đọc</th><th></th></tr></thead>
+          <tbody>
+          {% for c in chapters %}
+          <tr>
+            <td><input type="checkbox" name="n" value="{{ c.n }}" aria-label="Chọn chương {{ c.n }}"></td>
+            <td class="nowrap"><b>{{ c.n }}</b></td>
+            <td><a href="/dang-truyen/{{ s.id }}/chuong/{{ c.n }}">{{ c.title or "(không tên)" }}</a></td>
+            <td class="nowrap">
+              {% if not c.is_published %}<span class="badge">Nháp</span>
+              {% elif c.publish_at > now %}<span class="badge hot" title="{{ c.publish_at|fmt_time }}">{{ m.icon("clock") }} {{ c.publish_at|fmt_time }}</span>
+              {% else %}<span class="badge full">Đã đăng</span>{% endif %}
+            </td>
+            <td>{{ c.words|num }}</td>
+            <td>{{ c.views|num }}</td>
+            <td class="actions-cell">
+              <a class="btn btn-ghost btn-sm" href="/dang-truyen/{{ s.id }}/chuong/{{ c.n }}">Sửa</a>
+              <a class="btn btn-ghost btn-sm" href="{{ chapter_path(s, c.n) }}">Xem</a>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <span class="small muted">Với các chương đã chọn:</span>
+        <button class="btn btn-soft btn-sm" name="action" value="publish">Đăng</button>
+        <button class="btn btn-ghost btn-sm" name="action" value="draft">Chuyển nháp</button>
+        <button class="btn btn-danger btn-sm" name="action" value="delete" data-confirm="Xoá vĩnh viễn các chương đã chọn?">Xoá</button>
+      </div>
+    </form>
+    {{ m.pagination(page, "/dang-truyen/" ~ s.id, {}, "trang", "#chuong") }}
+    <form method="post" action="/dang-truyen/{{ s.id }}/danh-so-lai" style="margin-top: 14px;" data-confirm="Đánh lại số tất cả chương liên tục 1, 2, 3…? Link chương cũ có thể thay đổi.">
+      {{ m.csrf_field() }}<button class="btn btn-ghost btn-sm" type="submit">Đánh lại số chương liên tục</button>
+    </form>
+    {% else %}
+    <div class="empty">{{ m.icon("edit") }}<p>Chưa có chương nào.</p></div>
+    {% endif %}
+  </section>
+
+  <form class="card card-pad" style="margin-top: 18px;" method="post" action="/dang-truyen/{{ s.id }}" enctype="multipart/form-data">
+    {{ m.csrf_field() }}
+    <div class="row" style="gap: 18px; align-items: flex-start;">
+      <div style="width: 110px;">{{ m.cover(s) }}</div>
+      <div class="grow"><h2 style="font-size: 1.15rem;">Thông tin truyện</h2><p class="small muted">Mã truyện (slug): <code>{{ s.slug }}</code> · ID: <code>{{ s.id }}</code></p></div>
+    </div>
+    {% include "_story_fields.html" %}
+    <button class="btn" type="submit">Lưu thông tin</button>
+  </form>
+
+  <form class="card card-pad" style="margin-top: 18px; border-color: var(--danger);" method="post" action="/dang-truyen/{{ s.id }}/xoa">
+    {{ m.csrf_field() }}
+    <h2 style="font-size: 1.05rem; color: var(--danger);">Xoá truyện</h2>
+    <p class="small muted">Xoá vĩnh viễn truyện, toàn bộ chương, bình luận. Không thể khôi phục. Nhập <code>{{ s.slug }}</code> để xác nhận.</p>
+    <div class="row"><input class="grow" type="text" name="confirm" placeholder="{{ s.slug }}" autocomplete="off" aria-label="Mã truyện xác nhận"><button class="btn btn-danger" type="submit">Xoá truyện</button></div>
+  </form>
+</div>
+{% endblock %}

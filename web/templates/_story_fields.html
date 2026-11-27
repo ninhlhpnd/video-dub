@@ -1,0 +1,25 @@
+{% import "macros.html" as m with context %}
+{% set f = form if form is defined and form else (s if s else {}) %}
+<div class="field"><label for="title">Tên truyện</label><input id="title" type="text" name="title" value="{{ f.title or '' }}" maxlength="200" required></div>
+<div class="grid-2">
+  <div class="field"><label for="author">Tác giả <span class="muted">(tên hiển thị)</span></label><input id="author" type="text" name="author_name" value="{{ f.author_name or '' }}" maxlength="100" placeholder="{{ user.display_name }}"></div>
+  <div class="field"><label for="cover">Ảnh bìa</label><input id="cover" type="file" name="cover" accept="image/*"><div class="hint">Tự cắt về 400×600. {% if s and s.cover %}Đang có bìa – chọn ảnh mới để thay.{% endif %}</div></div>
+</div>
+<div class="grid-2">
+  <div class="field"><label for="status">Tình trạng</label>
+    <select id="status" name="status"><option value="ongoing" {{ "selected" if f.status != "completed" }}>Đang ra</option><option value="completed" {{ "selected" if f.status == "completed" }}>Hoàn thành</option></select></div>
+  <div class="field"><label for="origin">Nguồn</label>
+    <select id="origin" name="origin" data-origin>
+      <option value="original" {{ "selected" if f.origin in (none, "", "original") }}>Sáng tác</option>
+      <option value="translated" {{ "selected" if f.origin == "translated" }}>Dịch</option>
+      <option value="ai" {{ "selected" if f.origin == "ai" }}>AI viết</option>
+    </select></div>
+</div>
+<div class="grid-2" data-translated-only>
+  <div class="field"><label for="ot">Tên gốc</label><input id="ot" type="text" name="original_title" value="{{ f.original_title or '' }}" maxlength="200" placeholder="Ví dụ: 斗破苍穹"></div>
+  <div class="field"><label for="oa">Tác giả gốc</label><input id="oa" type="text" name="original_author" value="{{ f.original_author or '' }}" maxlength="100"></div>
+</div>
+<div class="field"><label>Thể loại <span class="muted">(tối đa 8)</span></label>
+  <div class="chips-select">{% for g in genres %}<label><input type="checkbox" name="genres" value="{{ g.id }}" {{ "checked" if g.id in selected }}><span>{{ g.name }}</span></label>{% endfor %}</div>
+</div>
+<div class="field"><label for="desc">Giới thiệu</label><textarea id="desc" name="description" rows="7" maxlength="10000">{{ f.description or '' }}</textarea></div>

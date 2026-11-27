@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}Bảng thuật ngữ – {{ job.title }}{% endblock %}
+{% block head %}<meta name="robots" content="noindex">{% endblock %}
+{% block content %}
+<div class="wrap" style="max-width: 900px;">
+  <div class="row" style="margin: 22px 0 4px;"><a class="small muted" href="/nhap-truyen/{{ job.id }}">← {{ job.title }}</a></div>
+  <h1 class="page-title" style="margin-top: 4px;">{{ m.icon("book") }} Bảng thuật ngữ</h1>
+  <p class="page-sub">Tên riêng và thuật ngữ AI phải dùng thống nhất. AI tự thêm mục mới khi gặp tên lạ; mục bạn sửa tay được khoá, AI không ghi đè. Xoá chữ ở cột tiếng Việt để xoá mục.</p>
+  <form method="post" action="/nhap-truyen/{{ job.id }}/tu-dien">
+    {{ m.csrf_field() }}
+    <div class="card" style="margin-bottom: 14px;">
+      <div class="card-pad" style="padding-bottom: 6px;"><b>Thêm mục</b></div>
+      <div class="row" style="padding: 0 18px 18px;">
+        <input type="text" name="new_zh" placeholder="Chữ Hán, ví dụ 林动" style="flex: 1 1 140px;" aria-label="Chữ Hán">
+        <input type="text" name="new_vi" placeholder="Tiếng Việt, ví dụ Lâm Động" style="flex: 1 1 160px;" aria-label="Tiếng Việt">
+        <input type="text" name="new_kind" placeholder="Loại (nhân vật…)" style="flex: 1 1 120px;" aria-label="Loại">
+        <button class="btn btn-soft" type="submit">Thêm</button>
+      </div>
+    </div>
+    {% if rows %}
+    <div class="card table-wrap">
+      <table class="table">
+        <thead><tr><th>Gốc</th><th>Tiếng Việt</th><th>Loại</th><th>Xoá</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="nowrap"><b>{{ r.zh }}</b>{% if r.locked %} <span class="badge" title="Đã sửa tay">{{ m.icon("check") }}</span>{% endif %}<input type="hidden" name="id" value="{{ r.id }}"></td>
+          <td><input type="text" name="vi" value="{{ r.vi }}" maxlength="80" aria-label="Bản dịch của {{ r.zh }}"></td>
+          <td style="width: 150px;"><input type="text" name="kind" value="{{ r.kind }}" maxlength="20" aria-label="Loại"></td>
+          <td style="width: 50px;"><input type="checkbox" name="delete" value="{{ r.id }}" aria-label="Xoá {{ r.zh }}"></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="sticky-bar"><button class="btn" type="submit">Lưu bảng thuật ngữ</button></div>
+    {% else %}<div class="card empty"><p>Chưa có thuật ngữ. AI sẽ lập bảng khi bắt đầu dịch.</p></div>{% endif %}
+  </form>
+</div>
+{% endblock %}

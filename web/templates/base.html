@@ -1,0 +1,130 @@
+{% import "macros.html" as m with context %}
+<!doctype html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}{{ settings.site_name }} – {{ settings.site_tagline }}{% endblock %}</title>
+<meta name="description" content="{% block description %}{{ meta_description or settings.site_tagline }}{% endblock %}">
+{% if canonical %}<link rel="canonical" href="{{ canonical }}">{% endif %}
+<meta property="og:site_name" content="{{ settings.site_name }}">
+<meta property="og:locale" content="vi_VN">
+{% block og %}
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ settings.site_name }}">
+<meta property="og:description" content="{{ meta_description or settings.site_tagline }}">
+{% if canonical %}<meta property="og:url" content="{{ canonical }}">{% endif %}
+{% endblock %}
+<meta name="theme-color" content="#c2410c">
+<script>(function(){try{var t=localStorage.getItem("theme");if(!t){t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.setAttribute("data-theme",t)}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="{{ static('css/site.css') }}">
+<link rel="icon" href="{{ static('img/favicon.svg') }}" type="image/svg+xml">
+{% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% block topbar %}
+{% set ann = site_setting("announcement") %}
+{% if ann %}<div class="announce"><div class="wrap">{{ ann }}</div></div>{% endif %}
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <button class="icon-btn only-mobile" type="button" data-open-drawer aria-label="Mở menu">{{ m.icon("menu") }}</button>
+    <a class="logo" href="/" aria-label="{{ settings.site_name }} – trang chủ"><span class="logo-mark">{{ m.icon("book-open") }}</span><span>{{ settings.site_name }}</span></a>
+    <nav class="mainnav" aria-label="Điều hướng chính">
+      <a href="/danh-sach" class="{{ 'active' if path == '/danh-sach' }}">Danh sách</a>
+      <div class="dd">
+        <button type="button" data-dd>Thể loại {{ m.icon("right", "rot") }}</button>
+        <div class="dd-menu genre-menu">
+          {% for g in nav_genres() %}<a href="/the-loai/{{ g.slug }}">{{ g.name }}</a>{% endfor %}
+        </div>
+      </div>
+      <a href="/xep-hang" class="{{ 'active' if path == '/xep-hang' }}">Xếp hạng</a>
+      <a href="/hoan-thanh" class="{{ 'active' if path == '/hoan-thanh' }}">Hoàn thành</a>
+      <a href="/ung-ho" class="{{ 'active' if path == '/ung-ho' }}">Ủng hộ</a>
+    </nav>
+    <form class="search" action="/danh-sach" role="search">
+      {{ m.icon("search") }}
+      <input type="search" name="q" placeholder="Tìm truyện, tác giả…" aria-label="Tìm truyện" value="{{ q if q is defined and q else '' }}">
+    </form>
+    <div class="top-actions">
+      <button class="icon-btn only-mobile" type="button" data-toggle-search aria-label="Tìm kiếm">{{ m.icon("search") }}</button>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="Đổi giao diện sáng/tối"><span class="t-dark">{{ m.icon("moon") }}</span><span class="t-light">{{ m.icon("sun") }}</span></button>
+      {% if user %}
+      <div class="dd">
+        <button class="icon-btn" type="button" data-dd aria-label="Tài khoản">{{ m.avatar(user, "sm") }}</button>
+        <div class="dd-menu">
+          <div class="dd-head"><b>{{ user.display_name }}</b><span class="muted small">@{{ user.username }} · {{ ROLE_LABEL[user.role] }}</span></div>
+          <hr>
+          <a href="/tu-truyen">{{ m.icon("bookmark") }} Tủ truyện</a>
+          <a href="/dang-truyen">{{ m.icon("edit") }} Đăng truyện</a>
+          {% if user.role in ("uploader", "admin") %}<a href="/nhap-truyen">{{ m.icon("translate") }} Nhập truyện Trung</a>{% endif %}
+          {% if user.role == "admin" %}<a href="/quan-tri">{{ m.icon("shield") }} Quản trị</a>{% endif %}
+          <a href="/tai-khoan">{{ m.icon("settings") }} Tài khoản</a>
+          <hr>
+          <form method="post" action="/dang-xuat">{{ m.csrf_field() }}<button type="submit">{{ m.icon("logout") }} Đăng xuất</button></form>
+        </div>
+      </div>
+      {% else %}
+      <a class="btn btn-sm" href="/dang-nhap{% if path not in ('/', '/dang-nhap', '/dang-ky') %}?next={{ path|urlq }}{% endif %}">Đăng nhập</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="wrap mobile-search only-mobile" id="mobile-search">
+    <form action="/danh-sach" role="search">{{ m.icon("search") }}<input type="search" name="q" placeholder="Tìm truyện, tác giả…" aria-label="Tìm truyện"></form>
+  </div>
+</header>
+<div class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-bg" data-close-drawer></div>
+  <div class="drawer-panel">
+    <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+      <a class="logo" href="/"><span class="logo-mark">{{ m.icon("book-open") }}</span><span>{{ settings.site_name }}</span></a>
+      <button class="icon-btn" type="button" data-close-drawer aria-label="Đóng menu">{{ m.icon("x") }}</button>
+    </div>
+    <nav>
+      <a href="/">{{ m.icon("home") }} Trang chủ</a>
+      <a href="/danh-sach">{{ m.icon("grid") }} Danh sách truyện</a>
+      <a href="/xep-hang">{{ m.icon("trophy") }} Xếp hạng</a>
+      <a href="/hoan-thanh">{{ m.icon("check") }} Truyện hoàn thành</a>
+      <a href="/tu-truyen">{{ m.icon("bookmark") }} Tủ truyện</a>
+      <a href="/ung-ho">{{ m.icon("gift") }} Ủng hộ trang</a>
+      {% if user %}
+      <a href="/dang-truyen">{{ m.icon("edit") }} Đăng truyện</a>
+      {% if user.role in ("uploader", "admin") %}<a href="/nhap-truyen">{{ m.icon("translate") }} Nhập truyện Trung</a>{% endif %}
+      {% if user.role == "admin" %}<a href="/quan-tri">{{ m.icon("shield") }} Quản trị</a>{% endif %}
+      {% endif %}
+    </nav>
+    <h4>Thể loại</h4>
+    <div class="drawer-genres">{% for g in nav_genres() %}<a class="chip" href="/the-loai/{{ g.slug }}">{{ g.name }}</a>{% endfor %}</div>
+  </div>
+</div>
+{% endblock %}
+
+<main id="main">{% block content %}{% endblock %}</main>
+
+{% block footer %}
+<footer class="footer">
+  <div class="wrap footer-in">
+    <div>
+      <a class="logo" href="/"><span class="logo-mark">{{ m.icon("book-open") }}</span><span>{{ settings.site_name }}</span></a>
+      <p style="margin-top: 12px;">{{ settings.site_tagline }}. Truyện sáng tác, truyện dịch và truyện do AI chấp bút, đọc miễn phí trên mọi thiết bị.</p>
+      <p class="small">Nội dung do thành viên đăng tải. Nếu bạn là chủ sở hữu bản quyền và muốn gỡ nội dung, hãy liên hệ quản trị viên.</p>
+    </div>
+    <div>
+      <h4>Khám phá</h4>
+      <ul><li><a href="/danh-sach">Danh sách truyện</a></li><li><a href="/xep-hang">Bảng xếp hạng</a></li><li><a href="/hoan-thanh">Truyện full</a></li><li><a href="/danh-sach?nguon=dich">Truyện dịch</a></li></ul>
+    </div>
+    <div>
+      <h4>Cộng đồng</h4>
+      <ul><li><a href="/dang-truyen">Đăng truyện</a></li><li><a href="/ung-ho">Ủng hộ trang</a></li><li><a href="/sitemap.xml">Sơ đồ trang</a></li></ul>
+    </div>
+  </div>
+</footer>
+{% endblock %}
+
+{% if flash %}<div class="toast" role="status">{{ flash }}</div>{% endif %}
+<script src="{{ static('js/site.js') }}" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

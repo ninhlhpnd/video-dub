@@ -1,0 +1,8 @@
+# Vẽ ảnh trên máy (.venv_img). torch 2.5.1 cài riêng từ index CUDA (xem setup.ps1).
+diffusers==0.32.2
+transformers==4.48.3
+accelerate==1.3.0
+huggingface-hub<1
+numpy<2.3
+safetensors
+pillow

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% import "macros.html" as m with context %}
+{% block title %}{{ chapter_title }} – {{ s.title }} | {{ settings.site_name }}{% endblock %}
+{% block og %}
+<meta property="og:type" content="article">
+<meta property="og:title" content="{{ s.title }} – {{ chapter_title }}">
+<meta property="og:description" content="{{ meta_description }}">
+<meta property="og:url" content="{{ canonical }}">
+{% if s.cover %}<meta property="og:image" content="{{ base }}/media/covers/{{ s.cover }}">{% endif %}
+{% if prev_n %}<link rel="prev" href="{{ chapter_path(s, prev_n) }}">{% endif %}
+{% if next_n %}<link rel="next" href="{{ chapter_path(s, next_n) }}">{% endif %}
+{% if draft %}<meta name="robots" content="noindex">{% endif %}
+{% endblock %}
+{% block head %}
+<script>(function(){try{var p=JSON.parse(localStorage.getItem("reader")||"{}"),r=document.documentElement.style;if(p.size)r.setProperty("--r-size",p.size+"px");if(p.lh)r.setProperty("--r-lh",p.lh);if(p.width)r.setProperty("--r-width",p.width+"px");if(p.font==="sans")r.setProperty("--r-font","var(--font-ui)")}catch(e){}})();</script>
+{% endblock %}
+{% block body_class %}reading{% endblock %}
+{% block content %}
+{% macro chapnav(pos) %}
+<nav class="chap-nav" aria-label="Chuyển chương">
+  {% if prev_n %}<a class="btn btn-ghost" href="{{ chapter_path(s, prev_n) }}" rel="prev" data-prev>{{ m.icon("left") }}<span class="lbl">Chương trước</span></a>
+  {% else %}<span class="btn btn-ghost disabled">{{ m.icon("left") }}<span class="lbl">Chương trước</span></span>{% endif %}
+  <select data-chapter-select data-story-id="{{ s.id }}" data-slug="{{ s.slug }}" data-current="{{ c.n }}" aria-label="Chọn chương ({{ pos }})">
+    {% for x in nearby %}<option value="{{ x.n }}" {{ "selected" if x.n == c.n }}>Chương {{ x.n }}{% if x.title %}: {{ x.title|truncate(60, true, "…") }}{% endif %}</option>{% endfor %}
+  </select>
+  {% if next_n %}<a class="btn" href="{{ chapter_path(s, next_n) }}" rel="next" data-next><span class="lbl">Chương sau</span>{{ m.icon("right") }}</a>
+  {% else %}<span class="btn disabled"><span class="lbl">Chương sau</span>{{ m.icon("right") }}</span>{% endif %}
+</nav>
+{% endmacro %}
+<div class="progress" id="progress" aria-hidden="true"></div>
+<article class="reader" id="reader" data-story-id="{{ s.id }}" data-slug="{{ s.slug }}" data-n="{{ c.n }}"
+  data-title="{{ s.title }}" data-chapter-title="{{ c.title }}" data-logged="{{ 1 if user else 0 }}">
+  <div class="reader-crumb">
+    <a href="/">Trang chủ</a> <span>/</span> <a href="{{ story_path(s) }}">{{ s.title }}</a>
+  </div>
+  {% if draft %}<div class="draft-bar" style="margin-top: 12px;">Bản nháp / chưa tới giờ đăng – chỉ bạn xem được</div>{% endif %}
+  <h1>{{ chapter_title }}</h1>
+  <div class="chap-meta">{{ s.author_name or "Ẩn danh" }} · {{ c.words|num }} chữ · {{ c.publish_at|fmt_date }}</div>
+  {{ chapnav("trên") }}
+  <div class="chap-text" id="chap-text">
+    {% for p in paras %}<p>{{ p }}</p>
+    {% endfor %}
+  </div>
+  <div class="chap-end">✦ ✦ ✦</div>
+  {% if payee %}
+  <div class="nudge">
+    <div style="flex: 1;"><p><b>Bạn thích chương này?</b> Một chút ủng hộ giúp {{ "tác giả" if donate_target == "author" else "trang" }} có thêm động lực ra chương mới.</p></div>
+    <button class="btn btn-sm" type="button" data-open-donate>{{ m.icon("gift") }} Ủng hộ</button>
+  </div>
+  {% endif %}
+  {{ chapnav("dưới") }}
+  <section class="card card-pad" style="margin-top: 26px;" id="binh-luan">
+    {% include "_comments.html" %}
+  </section>
+</article>
+
+<div class="reader-tools">
+  <button class="icon-btn" type="button" data-open-sheet aria-label="Cài đặt đọc">{{ m.icon("type") }}</button>
+  <a class="icon-btn" href="{{ story_path(s) }}#danh-sach-chuong" aria-label="Mục lục">{{ m.icon("list") }}</a>
+  <button class="icon-btn" type="button" data-scroll-top aria-label="Lên đầu trang">{{ m.icon("up") }}</button>
+</div>
+
+<div class="sheet" id="reader-sheet" aria-hidden="true">
+  <div class="sheet-bg" data-close-sheet></div>
+  <div class="sheet-panel" role="dialog" aria-label="Cài đặt đọc">
+    <h3>Cài đặt đọc <button class="icon-btn" type="button" data-close-sheet aria-label="Đóng">{{ m.icon("x") }}</button></h3>
+    <div class="opt"><span>Nền</span>
+      <div class="seg" data-pref="theme">
+        <button type="button" class="swatch sw-light" data-v="light">Sáng</button>
+        <button type="button" class="swatch sw-sepia" data-v="sepia">Giấy ngà</button>
+        <button type="button" class="swatch sw-dark" data-v="dark">Tối</button>
+      </div>
+    </div>
+    <div class="opt"><span>Cỡ chữ</span>
+      <div class="stepper" data-pref="size" data-min="14" data-max="32" data-step="1"><button type="button" data-d="-1" aria-label="Giảm cỡ chữ">A−</button><output>20</output><button type="button" data-d="1" aria-label="Tăng cỡ chữ">A+</button></div>
+    </div>
+    <div class="opt"><span>Giãn dòng</span>
+      <div class="seg" data-pref="lh"><button type="button" data-v="1.5">Hẹp</button><button type="button" data-v="1.85">Vừa</button><button type="button" data-v="2.2">Rộng</button></div>
+    </div>
+    <div class="opt"><span>Phông chữ</span>
+      <div class="seg" data-pref="font"><button type="button" data-v="serif" style="font-family: var(--font-read)">Có chân</button><button type="button" data-v="sans">Không chân</button></div>
+    </div>
+    <div class="opt"><span>Độ rộng</span>
+      <div class="seg" data-pref="width"><button type="button" data-v="620">Hẹp</button><button type="button" data-v="760">Vừa</button><button type="button" data-v="940">Rộng</button></div>
+    </div>
+    <p class="small muted" style="margin: 12px 0 0;">Phím tắt: ← chương trước, → chương sau.</p>
+  </div>
+</div>
+{% include "_donate_modal.html" %}
+{% endblock %}
+{% block scripts %}<script src="{{ static('js/reader.js') }}" defer></script>{% endblock %}

@@ -28,7 +28,8 @@ def emit(kind, **kw):
 
 
 def progress(step, pct, msg=""):
-    emit("progress", step=step, pct=round(max(0.0, min(100.0, pct)), 1), msg=msg)
+    """pct = None: chỉ đổi dòng thông báo, giữ nguyên thanh tiến độ."""
+    emit("progress", step=step, pct=None if pct is None else round(max(0.0, min(100.0, pct)), 1), msg=msg)
 
 
 def log(msg):
@@ -66,6 +67,14 @@ def run_ffmpeg_progress(args, duration, step, cwd=None):
         raise RuntimeError("ffmpeg lỗi: " + err.strip()[-1500:])
 
 
+def _fps(rate):
+    try:
+        a, b = str(rate).split("/")
+        return float(a) / float(b) if float(b) else 0.0
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
 def probe(path):
     cmd = [str(FFPROBE), "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)]
     r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -83,6 +92,7 @@ def probe(path):
         "height": int(v["height"]),
         "has_audio": a is not None,
         "vcodec": v.get("codec_name", ""),
+        "fps": _fps(v.get("avg_frame_rate")) or _fps(v.get("r_frame_rate")),
         "color_transfer": v.get("color_transfer", ""),
         "hdr": v.get("color_transfer", "") in HDR_TRANSFERS,
     }
@@ -143,6 +153,13 @@ def setup_cuda_dlls():
 DEFAULT_SETTINGS = {
     "gemini_api_key": "",
     "gemini_model": "gemini-flash-latest",
+    "story_writer": "gemini",  # người viết truyện: gemini (miễn phí) | claude (API, trả phí) | claude_cli (Claude Code)
+    "claude_cli_path": "",     # để trống = tự tìm claude.exe
+    "web_url": "",             # web đọc truyện (thư mục web/), để đăng chương tự động
+    "web_api_key": "",
+    "web_author": "",
+    "claude_api_key": "",
+    "claude_model": "claude-opus-5-5",
     "whisper_model": "large-v3-turbo",
     "youtube_client_secret": "",
     "facebook_page_id": "",
@@ -181,6 +198,13 @@ DEFAULT_OPTIONS = {
     "fix_overlays": False,     # dò chữ Trung in trên video → dịch / xóa / thay bằng tên kênh (xem overlays.py)
     "channel_name": "",        # tên kênh: dùng cho chữ được chọn "thay bằng tên kênh" và cho chữ gắn ở góc
     "channel_watermark": False,  # gắn tên kênh ở góc video suốt cả video
+    # chế độ "story": truyện kể do Claude viết (xem story.py)
+    "story_topic": "", "story_genre": "", "story_tone": "", "story_note": "",
+    "story_minutes": 15,
+    "story_images": 15,
+    "story_image_source": "auto",  # auto (Gemini rồi tới máy) | gemini | local
+    "story_speed": 1.0,
+    "story_polish": True,      # Claude đọc lại cả truyện và sửa chương yếu
     "channel_pos": "top-right",  # top-left | top-right | bottom-left | bottom-right
 }
 
@@ -196,12 +220,15 @@ def wants_separate(opt):
 PIPELINES = {
     "dub": ["transcribe", "speakers", "translate", "overlays", "separate", "tts", "render"],
     "review": ["script", "overlays", "separate", "tts", "render"],
+    "story": ["outline", "write", "polish", "scenes", "images", "voice", "compose"],
 }
 
 
 def steps_for(opt):
     mode = opt.get("mode", "dub")
     skip = set()
+    if mode == "story" and not opt.get("story_polish"):
+        skip.add("polish")
     if not wants_separate(opt):
         skip.add("separate")
     if mode == "dub" and not opt.get("multi_voice"):

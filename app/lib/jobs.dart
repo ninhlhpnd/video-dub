@@ -60,12 +60,15 @@ class JobManager extends ChangeNotifier {
   int get runningCount => _jobs.values.where((j) => j.running).length;
 
   /// Chạy engine cho project; trả về khi xong. [plan] là danh sách bước dự kiến.
-  Future<Job> start(Project pr, List<String> args, List<String> plan) async {
-    final job = Job(pr.dir, plan);
-    _jobs[pr.dir] = job;
+  Future<Job> start(Project pr, List<String> args, List<String> plan) => startDir(pr.dir, args, plan);
+
+  /// Chạy engine cho một thư mục bất kỳ (project video hoặc bộ truyện dài), engine nhận qua --project.
+  Future<Job> startDir(String dir, List<String> args, List<String> plan) async {
+    final job = Job(dir, plan);
+    _jobs[dir] = job;
     job.log('▶ ${args.join(' ')}');
     notifyListeners();
-    await for (final ev in job.engine.run([...args, '--project', pr.dir], engineOverride: settings.get('engine_dir'))) {
+    await for (final ev in job.engine.run([...args, '--project', dir], engineOverride: settings.get('engine_dir'))) {
       switch (ev.type) {
         case 'plan':
           job.plan = (ev.data['steps'] as List).cast<String>();
@@ -79,7 +82,7 @@ class JobManager extends ChangeNotifier {
             job.step = ev.step;
             job.stepStartedAt = DateTime.now();
           }
-          job.pct = ev.pct;
+          if (ev.data['pct'] != null) job.pct = ev.pct;
           if (ev.msg.isNotEmpty) job.msg = ev.msg;
         case 'log':
         case 'raw':
